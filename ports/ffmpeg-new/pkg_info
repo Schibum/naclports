@@ -1,0 +1,4 @@
+PACKAGE_NAME=ffmpeg-2.1
+URL=http://ffmpeg.org/releases/ffmpeg-2.1.tar.gz
+LICENSE=GPL,LGPL
+SHA1=330407059a0a599c2665f41e751e3eb315aaaf21

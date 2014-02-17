@@ -103,6 +103,7 @@ ALL_PORTS = \
      ports/faac \
      ports/faad2 \
      ports/ffmpeg \
+     ports/ffmpeg-new \
      ports/fftw \
      ports/flac \
      ports/fontconfig \
@@ -195,6 +196,7 @@ ALL_PORTS = \
      ports/vim \
      ports/webp \
      ports/x264 \
+     ports/libvpx \
      ports/xaos \
      ports/yajl \
      ports/zeromq \

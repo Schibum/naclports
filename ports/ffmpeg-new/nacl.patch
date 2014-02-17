@@ -1,0 +1,89 @@
+diff --git a/ffmpeg.c b/ffmpeg.c
+index 001e5c1..86b9af1 100644
+--- a/ffmpeg.c
++++ b/ffmpeg.c
+@@ -102,6 +102,8 @@
+ 
+ #include "libavutil/avassert.h"
+ 
++#undef HAVE_GETRUSAGE
++
+ const char program_name[] = "ffmpeg";
+ const int program_birth_year = 2000;
+ 
+diff --git a/libavutil/mem.c b/libavutil/mem.c
+index 5aad97a..83665f4 100644
+--- a/libavutil/mem.c
++++ b/libavutil/mem.c
+@@ -57,6 +57,8 @@ void  free(void *ptr);
+ 
+ #endif /* MALLOC_PREFIX */
+ 
++int   posix_memalign(void **ptr, size_t align, size_t size);
++
+ #define ALIGN (HAVE_AVX ? 32 : 16)
+ 
+ /* NOTE: if you want to override these functions with your own
+diff --git a/libavutil/x86/cpu.c b/libavutil/x86/cpu.c
+index 18049ea..e666bcf 100644
+--- a/libavutil/x86/cpu.c
++++ b/libavutil/x86/cpu.c
+@@ -72,20 +72,23 @@
+ 
+ #elif HAVE_INLINE_ASM
+ 
+-static int cpuid_test(void)
+-{
+-    x86_reg a, c;
+-
+-    /* Check if CPUID is supported by attempting to toggle the ID bit in
+-     * the EFLAGS register. */
+-    get_eflags(a);
+-    set_eflags(a ^ 0x200000);
+-    get_eflags(c);
+-
+-    return a != c;
+-}
++// static int cpuid_test(void)
++// {
++//     x86_reg a, c;
++//
++//     /* Check if CPUID is supported by attempting to toggle the ID bit in
++//      * the EFLAGS register. */
++//     get_eflags(a);
++//     set_eflags(a ^ 0x200000);
++//     get_eflags(c);
++//
++//     return a != c;
++// }
+ #endif
+ 
++#undef cpuid_test
++#define cpuid_test() 1
++
+ /* Function to test if multimedia instructions are supported...  */
+ int ff_get_cpu_flags_x86(void)
+ {
+diff --git a/libswscale/x86/swscale_template.c b/libswscale/x86/swscale_template.c
+index c7a1bb4..63b938c 100644
+--- a/libswscale/x86/swscale_template.c
++++ b/libswscale/x86/swscale_template.c
+@@ -1498,7 +1498,7 @@ static void RENAME(hyscale_fast)(SwsContext *c, int16_t *dst,
+ #if ARCH_X86_64
+ #define CALL_MMXEXT_FILTER_CODE \
+         "movl            (%%"REG_b"), %%esi     \n\t"\
+-        "call                    *%4            \n\t"\
++        "naclcall                    *%4            \n\t"\
+         "movl (%%"REG_b", %%"REG_a"), %%esi     \n\t"\
+         "add               %%"REG_S", %%"REG_c" \n\t"\
+         "add               %%"REG_a", %%"REG_D" \n\t"\
+@@ -1507,7 +1507,8 @@ static void RENAME(hyscale_fast)(SwsContext *c, int16_t *dst,
+ #else
+ #define CALL_MMXEXT_FILTER_CODE \
+         "movl (%%"REG_b"), %%esi        \n\t"\
+-        "call         *%4                       \n\t"\
++        "mov %%"REG_d", %4        \n\t"\
++        "naclcall         %%"REG_d"                     \n\t"\
+         "addl (%%"REG_b", %%"REG_a"), %%"REG_c" \n\t"\
+         "add               %%"REG_a", %%"REG_D" \n\t"\
+         "xor               %%"REG_a", %%"REG_a" \n\t"\

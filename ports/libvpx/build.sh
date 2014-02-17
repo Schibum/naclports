@@ -3,9 +3,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-BUILD_DIR=${SRC_DIR}
+source pkg_info
+source ../../build_tools/common.sh
+
 
 ConfigureStep() {
+  Banner "Configuring ${PACKAGE_NAME}"
   # export the nacl tools
   export CC=${NACLCC}
   export CXX=${NACLCXX}
@@ -22,18 +25,20 @@ ConfigureStep() {
   else
     conf_host=${NACL_CROSS_PREFIX}
   fi
+  export CROSS=$NACL_CROSS_PREFIX-
 
   LogExecute ./configure \
-    --cross-prefix=${NACL_CROSS_PREFIX} \
-    --disable-asm \
-    --disable-opencl \
+    --enable-vp8 \
+    --target=pnacl \
     --prefix=${NACLPORTS_PREFIX} \
-    --exec-prefix=${NACLPORTS_PREFIX} \
     --libdir=${NACLPORTS_LIBDIR} \
-    --extra-ldflags="-lm" \
-    --disable-cli \
-    --host=${conf_host} \
-    --enable-static
+    --disable-unit-tests \
+    --disable-examples \
+    --disable-runtime_cpu_detect 
 
   make clean
 }
+
+
+PackageInstall
+exit 0
