@@ -1,0 +1,33 @@
+diff --git a/configure b/configure
+index be36e56..51f2563 100755
+--- a/configure
++++ b/configure
+@@ -136,6 +136,7 @@ all_platforms="${all_platforms} universal-darwin10-gcc"
+ all_platforms="${all_platforms} universal-darwin11-gcc"
+ all_platforms="${all_platforms} universal-darwin12-gcc"
+ all_platforms="${all_platforms} generic-gnu"
++all_platforms="${all_platforms} pnacl"
+ 
+ # all_targets is a list of all targets that can be configured
+ # note that these should be in dependency order for now.
+@@ -203,6 +204,7 @@ ARCH_LIST="
+     x86_64
+     ppc32
+     ppc64
++    pnacl
+ "
+ ARCH_EXT_LIST="
+     edsp
+@@ -490,9 +492,9 @@ process_detect() {
+         }
+     fi
+     check_header stdio.h || die "Unable to invoke compiler: ${CC} ${CFLAGS}"
+-    check_ld <<EOF || die "Toolchain is unable to link executables"
+-int main(void) {return 0;}
+-EOF
++#     check_ld <<EOF || die "Toolchain is unable to link executables"
++# int main(void) {return 0;}
++# EOF
+     # check system headers
+     check_header stdint.h
+     check_header pthread.h

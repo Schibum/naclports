@@ -25,18 +25,16 @@ ConfigureStep() {
   else
     conf_host=${NACL_CROSS_PREFIX}
   fi
+  export CROSS=$NACL_CROSS_PREFIX-
 
   LogExecute ./configure \
-    --cross-prefix=${NACL_CROSS_PREFIX} \
-    --disable-asm \
-    --disable-opencl \
+    --enable-vp8 \
+    --target=pnacl \
     --prefix=${NACLPORTS_PREFIX} \
-    --exec-prefix=${NACLPORTS_PREFIX} \
     --libdir=${NACLPORTS_LIBDIR} \
-    --extra-ldflags="-lm" \
-    --disable-cli \
-    --host=${conf_host} \
-    --enable-static
+    --disable-unit-tests \
+    --disable-examples \
+    --disable-runtime_cpu_detect 
 
   make clean
 }

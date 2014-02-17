@@ -97,6 +97,7 @@ ALL_PORTS = \
      ports/faac \
      ports/faad2 \
      ports/ffmpeg \
+     ports/ffmpeg-new \
      ports/fftw \
      ports/flac \
      ports/fontconfig \
@@ -173,6 +174,7 @@ ALL_PORTS = \
      ports/vim \
      ports/webp \
      ports/x264 \
+     ports/libvpx \
      ports/xaos \
      ports/yajl \
      ports/zlib
@@ -258,6 +260,8 @@ $(SENT)/ports/agg: ports/freetype
 $(SENT)/ports/cairo: ports/pixman ports/fontconfig ports/libpng
 $(SENT)/ports/ffmpeg: ports/lame ports/libvorbis ports/libtheora \
     ports/glibc-compat
+$(SENT)/ports/ffmpeg-new: ports/libvorbis \
+    ports/glibc-compat ports/libvpx
 $(SENT)/ports/webp: ports/tiff ports/jpeg8d
 $(SENT)/ports/libav: ports/lame ports/libvorbis
 $(SENT)/ports/libtar: ports/zlib
@@ -330,6 +334,7 @@ expat: ports/expat ;
 faac: ports/faac ;
 faad faad2: ports/faad2 ;
 ffmpeg: ports/ffmpeg ;
+ffmpeg-new: ports/ffmpeg-new ;
 fftw: ports/fftw ;
 flac: ports/flac ;
 fontconfig: ports/fontconfig ;
@@ -417,6 +422,7 @@ snes9x: ports/snes9x ;
 texlive: ports/texlive ;
 thttpd: ports/thttpd ;
 openssh: ports/openssh ;
+libvpx: ports/libvpx ;
 # Deliberate space after vim target to avoid detection
 # as modeline string.
 vim : ports/vim ;
