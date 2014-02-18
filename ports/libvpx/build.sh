@@ -3,9 +3,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-source pkg_info
-source ../../build_tools/common.sh
-
 
 ConfigureStep() {
   Banner "Configuring ${PACKAGE_NAME}"
@@ -17,7 +14,8 @@ ConfigureStep() {
   export PKG_CONFIG_PATH=${NACLPORTS_LIBDIR}/pkgconfig
   export PKG_CONFIG_LIBDIR=${NACLPORTS_LIBDIR}
   export PATH=${NACL_BIN_PATH}:${PATH};
-  ChangeDir ${NACL_PACKAGES_REPOSITORY}/${PACKAGE_NAME}
+  MakeDir ${NACL_PACKAGES_REPOSITORY}/${PACKAGE_NAME}/${NACL_BUILD_SUBDIR}
+  ChangeDir ${NACL_PACKAGES_REPOSITORY}/${PACKAGE_NAME}/${NACL_BUILD_SUBDIR}
 
   local conf_host
   if [ "${NACL_ARCH}" = pnacl ]; then
@@ -27,7 +25,7 @@ ConfigureStep() {
   fi
   export CROSS=$NACL_CROSS_PREFIX-
 
-  LogExecute ./configure \
+  ../configure \
     --enable-vp8 \
     --target=pnacl \
     --prefix=${NACLPORTS_PREFIX} \
@@ -39,6 +37,3 @@ ConfigureStep() {
   make clean
 }
 
-
-PackageInstall
-exit 0
