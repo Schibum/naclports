@@ -1,0 +1,323 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index ac1032a..a238fbb 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -72,14 +72,21 @@ SET(LIB_INSTALL_DIR lib CACHE PATH "Where to install libraries to.")
+ SET(INCLUDE_INSTALL_DIR include CACHE PATH "Where to install headers to.")
+ 
+ FUNCTION(TARGET_OS_LIBRARIES target)
++	MESSAGE(">>>>>>> Libc = $ENV{NACL_LIBC}")
++
+ 	IF(WIN32)
+ 		TARGET_LINK_LIBRARIES(${target} ws2_32)
+ 	ELSEIF(CMAKE_SYSTEM_NAME MATCHES "(Solaris|SunOS)")
+ 		TARGET_LINK_LIBRARIES(${target} socket nsl)
+ 		SET(LIBGIT2_PC_LIBS "${LIBGIT2_PC_LIBS} -lsocket -lnsl" PARENT_SCOPE)
+ 	ELSEIF(CMAKE_SYSTEM_NAME MATCHES "Linux")
+-		TARGET_LINK_LIBRARIES(${target} rt)
+-		SET(LIBGIT2_PC_LIBS "${LIBGIT2_PC_LIBS} -lrt" PARENT_SCOPE)
++		IF($ENV{NACL_LIBC} STREQUAL "newlib")
++			TARGET_LINK_LIBRARIES(${target} glibc-compat)
++			SET(LIBGIT2_PC_LIBS "${LIBGIT2_PC_LIBS} -lglibc-compat" PARENT_SCOPE)
++		ELSE()
++			TARGET_LINK_LIBRARIES(${target} rt)
++			SET(LIBGIT2_PC_LIBS "${LIBGIT2_PC_LIBS} -lrt" PARENT_SCOPE)
++		ENDIF()
+ 	ENDIF()
+ 
+ 	IF(USE_ICONV)
+diff --git a/src/pool.c b/src/pool.c
+index d484769..287e08e 100644
+--- a/src/pool.c
++++ b/src/pool.c
+@@ -313,7 +313,7 @@ uint32_t git_pool__system_page_size(void)
+ #elif defined(__amigaos4__)
+ 		size = (uint32_t)4096; /* 4K as there is no global value we can query */
+ #else
+-		size = (uint32_t)sysconf(_SC_PAGE_SIZE);
++		size = (uint32_t)sysconf(_SC_PAGESIZE);
+ #endif
+ 
+ 		size -= 2 * sizeof(void *); /* allow space for malloc overhead */
+diff --git a/tests/blame/buffer.c b/tests/blame/buffer.c
+index 912ee98..340b1dc 100644
+--- a/tests/blame/buffer.c
++++ b/tests/blame/buffer.c
+@@ -1,7 +1,7 @@
+ #include "blame_helpers.h"
+ 
+-git_repository *g_repo;
+-git_blame *g_fileblame, *g_bufferblame;
++static git_repository *g_repo;
++static git_blame *g_fileblame, *g_bufferblame;
+ 
+ void test_blame_buffer__initialize(void)
+ {
+diff --git a/tests/clar/fs.h b/tests/clar/fs.h
+index b7a1ff9..1d508a3 100644
+--- a/tests/clar/fs.h
++++ b/tests/clar/fs.h
+@@ -250,7 +250,250 @@ cl_fs_cleanup(void)
+ 	fs_rm(fixture_path(_clar_path, "*"));
+ }
+ 
++#elif defined(__native_client__)
++
++#include <dirent.h>
++#include <errno.h>
++#include <limits.h>
++#include <sys/stat.h>
++
++static int fs_copy_helper(const char* source, const char* dest);
++
++static int fs_copy_dir(const char* source, const char* dest) {
++  DIR* src_dir = opendir(source);
++  struct dirent* dirent_buf = malloc(sizeof(struct dirent));
++  struct dirent* dir_entry = NULL;
++  int result = 1;
++
++  if (src_dir == NULL) {
++    fprintf(stderr, "Error opening directory %s: %s\n",
++            source, strerror(errno));
++    goto error;
++  }
++
++  // Create the destination directory.
++  if (mkdir(dest, 0700) != 0) {
++    if (errno != EEXIST) {
++      fprintf(stderr, "Error creating directory %s: %s\n",
++              dest, strerror(errno));
++      goto error;
++    }
++  }
++
++  while (1) {
++    char src_entry_path[PATH_MAX];
++    char dst_entry_path[PATH_MAX];
++    const char* entry_name;
++
++    if (readdir_r(src_dir, dirent_buf, &dir_entry) != 0) {
++      fprintf(stderr, "Error reading directory %s: %s\n",
++              source, strerror(errno));
++      goto error;
++    }
++
++    if (dir_entry == NULL) {
++      break;
++    }
++
++    entry_name = dir_entry->d_name;
++
++    if (strcmp(entry_name, ".") == 0 || strcmp(entry_name, "..") == 0)
++      continue;
++
++    snprintf(&src_entry_path[0], PATH_MAX, "%s/%s", source, entry_name);
++    snprintf(&dst_entry_path[0], PATH_MAX, "%s/%s", dest, entry_name);
++
++    if (!fs_copy_helper(src_entry_path, dst_entry_path)) {
++      goto error;
++    }
++  }
++
++  goto cleanup;
++
++error:
++  result = 0;
++
++cleanup:
++  closedir(src_dir);
++  return result;
++}
++
++static int fs_copy_file(const char* source, const char* dest) {
++  const size_t buffer_size = 8192;
++  char buffer[buffer_size];
++  int result = 1;
++
++  FILE* src_file = fopen(source, "r");
++  if (src_file == NULL) {
++    fprintf(stderr, "Error opening file %s for reading: %s\n",
++            source, strerror(errno));
++    goto error;
++  }
++
++  FILE* dst_file = fopen(dest, "w");
++  if (dst_file == NULL) {
++    fprintf(stderr, "Error opening file %s for writing: %s\n",
++            dest, strerror(errno));
++    goto error;
++  }
++
++  while (!feof(src_file)) {
++    ssize_t bytes_read = fread(&buffer[0], 1, buffer_size, src_file);
++    ssize_t bytes_written;
++    if (bytes_read < 0) {
++      fprintf(stderr, "Unable to read from %s: %s\n", source, strerror(errno));
++      goto error;
++    }
++
++    bytes_written = fwrite(&buffer[0], 1, bytes_read, dst_file);
++    if (bytes_written != bytes_read) {
++      fprintf(stderr, "Unable to write %d bytes of %s to %s: %s\n",
++              bytes_read, source, dest, strerror(errno));
++      goto error;
++    }
++  }
++
++  goto cleanup;
++
++error:
++  result = 0;
++
++cleanup:
++  if (src_file)
++    fclose(src_file);
++
++  if (dst_file)
++    fclose(dst_file);
++
++  return result;
++}
++
++static int fs_copy_helper(const char *source, const char *dest) {
++  struct stat statbuf;
++  if (stat(source, &statbuf) != 0) {
++    fprintf(stderr, "Error stat'ing file %s: %s\n", source, strerror(errno));
++    return 0;
++  }
++
++  if (S_ISDIR(statbuf.st_mode)) {
++    if (!fs_copy_dir(source, dest))
++      return 0;
++  } else {
++    if (!fs_copy_file(source, dest))
++      return 0;
++  }
++
++  return 1;
++}
++
++
++static void fs_copy(const char *source, const char *dest) {
++  char real_dest[PATH_MAX];
++  char* last_slash = NULL;
++
++  // Copy the base directory name of source to dest.
++  // e.g. fs_copy("foo/bar/baz", "/tmp/blah") creates "/tmp/blah/baz".
++
++  last_slash = strrchr(source, '/');
++  if (last_slash != NULL) {
++    snprintf(real_dest, PATH_MAX, "%s/%s", dest, last_slash + 1);
++  } else {
++    strncpy(real_dest, dest, PATH_MAX);
++  }
++
++  cl_must_pass_(fs_copy_helper(source, real_dest),
++                "Failed to copy test fixtures to sandbox");
++}
++
++static int fs_rm_helper(const char* source);
++
++static int fs_rm_dir(const char* source) {
++  DIR* src_dir = opendir(source);
++  struct dirent* dir_entry = NULL;
++  int result = 1;
++
++  if (src_dir == NULL) {
++    fprintf(stderr, "Error opening directory %s: %s\n",
++            source, strerror(errno));
++    goto error;
++  }
++
++  for (dir_entry = readdir(src_dir); dir_entry; dir_entry = readdir(src_dir)) {
++    char src_entry_path[PATH_MAX];
++    const char* entry_name = dir_entry->d_name;
++
++    if (strcmp(entry_name, ".") == 0 || strcmp(entry_name, "..") == 0)
++      continue;
++
++    snprintf(&src_entry_path[0], PATH_MAX, "%s/%s", source, entry_name);
++
++    if (!fs_rm_helper(src_entry_path)) {
++      goto error;
++    }
++  }
++
++  // Finally, remove source.
++  if (rmdir(source) != 0) {
++    fprintf(stderr, "Error removing directory %s: %s\n",
++            source, strerror(errno));
++    goto error;
++  }
++
++  goto cleanup;
++
++error:
++  result = 0;
++
++cleanup:
++  closedir(src_dir);
++  return result;
++}
++
++static int fs_rm_file(const char* source) {
++  if (unlink(source) != 0) {
++    fprintf(stderr, "Error removing file %s: %s\n", source, strerror(errno));
++    return 0;
++  }
++
++  return 1;
++}
++
++static int fs_rm_helper(const char* source) {
++  struct stat statbuf;
++  if (stat(source, &statbuf) != 0) {
++    fprintf(stderr, "Error stat'ing file %s: %s\n", source, strerror(errno));
++    return 0;
++  }
++
++  if (S_ISDIR(statbuf.st_mode)) {
++    if (!fs_rm_dir(source))
++      return 0;
++  } else {
++    if (!fs_rm_file(source))
++      return 0;
++  }
++
++  return 1;
++}
++
++static void
++fs_rm(const char *source)
++{
++	cl_must_pass_(
++		fs_rm_helper(source),
++		"Failed to cleanup the sandbox"
++	);
++}
++
++void
++cl_fs_cleanup(void)
++{
++	clar_unsandbox();
++	clar_sandbox();
++}
++
+ #else
++
+ static int
+ shell_out(char * const argv[])
+ {
+diff --git a/tests/index/addall.c b/tests/index/addall.c
+index 44c5127..abc84b2 100644
+--- a/tests/index/addall.c
++++ b/tests/index/addall.c
+@@ -3,7 +3,7 @@
+ #include "posix.h"
+ #include "fileops.h"
+ 
+-git_repository *g_repo = NULL;
++static git_repository *g_repo = NULL;
+ 
+ void test_index_addall__initialize(void)
+ {

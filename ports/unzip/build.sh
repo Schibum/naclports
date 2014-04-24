@@ -3,9 +3,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-BuildStep() {
-  ChangeDir ${SRC_DIR}
+BUILD_DIR=${SRC_DIR}
 
+BuildStep() {
   make -f unix/Makefile clean
   # "generic" target, which runs unix/configure, is
   # suggested. However, this target does not work well with NaCl. For
@@ -16,8 +16,9 @@ BuildStep() {
   # (e.g., libppapi).
   make -j${OS_JOBS} -f unix/Makefile unzips \
       CC=${NACLCC} LD=${NACLCXX} \
-      CFLAGS="${NACL_CFLAGS} -DHAVE_TERMIOS_H -DNO_LCHMOD -Dmain=nacl_main" \
-      LFLAGS1="${NACL_LDFLAGS} ${NACL_CLI_MAIN_LIB} \
+      CFLAGS="${NACLPORTS_CPPFLAGS} ${NACLPORTS_CFLAGS} \
+      -DHAVE_TERMIOS_H -DNO_LCHMOD -Dmain=nacl_main" \
+      LFLAGS1="${NACLPORTS_LDFLAGS} ${NACL_CLI_MAIN_LIB} \
                -lppapi_simple -lnacl_io -lppapi -lppapi_cpp"
 }
 

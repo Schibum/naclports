@@ -4,10 +4,9 @@
 # found in the LICENSE file.
 
 
-
 BuildStep() {
-  cd ${NACL_PACKAGES_REPOSITORY}/${PACKAGE_NAME}
-  local cflags="${NACLPORTS_CFLAGS}"
+  ChangeDir ${SRC_DIR}
+  local cflags="${NACLPORTS_CFLAGS} -I${NACLPORTS_INCLUDE}/freetype2"
   if [ ${NACL_ARCH} != "pnacl" ]; then
     cflags="${cflags} -O3 -fomit-frame-pointer"
   fi
@@ -20,13 +19,11 @@ BuildStep() {
 
 InstallStep() {
   # copy libs and headers manually
-  ChangeDir ${NACLPORTS_INCLUDE}
-  Remove ${PACKAGE_NAME}
-  MakeDir ${PACKAGE_NAME}
-  readonly THIS_PACKAGE_PATH=${NACL_PACKAGES_REPOSITORY}/${PACKAGE_NAME}
-  cp -R ${THIS_PACKAGE_PATH}/include/*.h ${PACKAGE_NAME}/
-  cp ${THIS_PACKAGE_PATH}/font_freetype/*.h ${PACKAGE_NAME}/
-  ChangeDir ${NACLPORTS_LIBDIR}
-  cp ${THIS_PACKAGE_PATH}/src/libagg.a .
-  cp ${THIS_PACKAGE_PATH}/font_freetype/libaggfontfreetype.a .
+  MakeDir ${DESTDIR_LIB}
+  INCDIR=${DESTDIR_INCLUDE}/${NAME}-${VERSION}
+  MakeDir ${INCDIR}
+  LogExecute cp -R ${SRC_DIR}/include/*.h ${INCDIR}/
+  LogExecute cp ${SRC_DIR}/font_freetype/*.h ${INCDIR}/
+  LogExecute cp ${SRC_DIR}/src/libagg.a ${DESTDIR_LIB}
+  LogExecute cp ${SRC_DIR}/font_freetype/libaggfontfreetype.a ${DESTDIR_LIB}/
 }

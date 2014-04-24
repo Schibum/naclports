@@ -3,17 +3,15 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-
 BUILD_DIR=${SRC_DIR}
 EXTRA_CONFIGURE_ARGS="--with-tlib=ncurses --prefix= --exec-prefix="
-EXECUTABLES=src/vim
+EXECUTABLES=src/vim${NACL_EXEEXT}
 export EXTRA_LIBS="${NACL_CLI_MAIN_LIB} -ltar -lppapi_simple -lnacl_io \
   -lppapi -lppapi_cpp -l${NACL_CPP_LIB}"
 
 PatchStep() {
   DefaultPatchStep
-  ChangeDir ${NACL_PACKAGES_REPOSITORY}/${PACKAGE_DIR}
-  cp ${START_DIR}/vim_pepper.c src/vim_pepper.c
+  LogExecute cp ${START_DIR}/vim_pepper.c ${SRC_DIR}/src/vim_pepper.c
 }
 
 ConfigureStep() {
@@ -29,6 +27,7 @@ ConfigureStep() {
   else
     export STRIP=${NACLSTRIP}
   fi
+  NACL_CONFIGURE_PATH=./configure
   DefaultConfigureStep
   # Vim's build doesn't support building outside the source tree.
   # Do a clean to make rebuild after failure predictable.
@@ -39,11 +38,11 @@ InstallStep() {
   MakeDir ${PUBLISH_DIR}
   local ASSEMBLY_DIR="${PUBLISH_DIR}/vim"
 
-  export INSTALL_TARGETS="DESTDIR=${ASSEMBLY_DIR}/vimtar install"
+  DESTDIR=${ASSEMBLY_DIR}/vimtar
   DefaultInstallStep
 
   ChangeDir ${ASSEMBLY_DIR}/vimtar
-  cp bin/vim ../vim_${NACL_ARCH}${NACL_EXEEXT}
+  cp bin/vim${NACL_EXEEXT} ../vim_${NACL_ARCH}${NACL_EXEEXT}
   rm -rf bin
   rm -rf share/man
   tar cf ${ASSEMBLY_DIR}/vim.tar .

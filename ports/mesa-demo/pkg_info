@@ -1,0 +1,4 @@
+NAME=mesa-demo
+VERSION=0.1
+DEPENDS=(mesa)
+DISABLED=1

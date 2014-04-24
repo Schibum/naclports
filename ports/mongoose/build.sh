@@ -3,11 +3,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+BUILD_DIR=${SRC_DIR}
 
 BuildStep() {
-  export EXTRA_CFLAGS="${NACL_CFLAGS}"
-  export LDFLAGS="${NACL_LDFLAGS} -lppapi_simple -lnacl_io -lppapi_cpp -lppapi"
-  if [ "$NACL_GLIBC" = "1" ]; then
+  export EXTRA_CFLAGS="${NACLPORTS_CPPFLAGS} ${NACLPORTS_CFLAGS}"
+  export LDFLAGS="${NACLPORTS_LDFLAGS}"
+  LDFLAGS+=" -lppapi_simple -lnacl_io -lppapi_cpp -lppapi"
+  if [ "$NACL_LIBC" = "glibc" ]; then
     LDFLAGS+=" -ldl"
   fi
   CC=${NACLCC} LogExecute make clean

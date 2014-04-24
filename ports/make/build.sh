@@ -5,6 +5,6 @@
 
 CONFIG_SUB=config/config.sub
 
-if [ "${NACL_GLIBC}" != "1" ]; then
-  NACLPORTS_CFLAGS+=" -D_POSIX_VERSION"
+if [ "${NACL_LIBC}" = "newlib" ]; then
+  NACLPORTS_CPPFLAGS+=" -D_POSIX_VERSION"
 fi

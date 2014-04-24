@@ -7,29 +7,24 @@
 # to build directly in the source dir.
 BUILD_DIR=${SRC_DIR}
 EXECUTABLES="minigzip${NACL_EXEEXT} example${NACL_EXEEXT}"
-if [ "${NACL_GLIBC}" = "1" ]; then
+if [ "${NACL_SHARED}" = "1" ]; then
   EXECUTABLES+=" libz.so.1"
 fi
 
 ConfigureStep() {
-  MakeDir ${BUILD_DIR}
-  ChangeDir ${BUILD_DIR}
   LogExecute rm -f libz.*
-  PATH=${NACL_BIN_PATH}:${PATH} \
-    CC=${NACLCC} \
-    CHOST=${NACL_CROSS_PREFIX} \
-    CFLAGS="${NACLPORTS_CFLAGS}" \
-    LogExecute ./configure --prefix="${NACLPORTS_PREFIX}"
+  SetupCrossEnvironment
+  CHOST=${NACL_CROSS_PREFIX} LogExecute ./configure --prefix=${PREFIX}
 }
 
 
 RunMinigzip() {
   export LD_LIBRARY_PATH=.
   if echo "hello world" | ./minigzip | ./minigzip -d; then
-    echo '  *** minigzip test OK ***' ; \
-      else
-    echo '  *** minigzip test FAILED ***' ; \
-      exit 1
+    echo '  *** minigzip test OK ***'
+  else
+    echo '  *** minigzip test FAILED ***'
+    exit 1
   fi
   unset LD_LIBRARY_PATH
 }
@@ -49,14 +44,14 @@ RunExample() {
 
 
 TestStep() {
-  if [ "${NACL_GLIBC}" = "1" ]; then
+  if [ "${NACL_LIBC}" = "glibc" ]; then
     # Tests do not currently run on GLIBC due to fdopen() not working
     # TODO(sbc): Remove this once glibc is fixed:
     # https://code.google.com/p/nativeclient/issues/detail?id=3362
     return
   fi
 
-  if [ $NACL_ARCH = "pnacl" ]; then
+  if [ "${NACL_ARCH}" = "pnacl" ]; then
     local minigzip_pexe="minigzip${NACL_EXEEXT}"
     local example_pexe="example${NACL_EXEEXT}"
     local minigzip_script="minigzip"
@@ -74,9 +69,7 @@ TestStep() {
       example.x86-64.nexe ${example_script}
     RunExample
   else
-    WriteSelLdrScript minigzip minigzip.nexe
     RunMinigzip
-    WriteSelLdrScript example example.nexe
     RunExample
   fi
 }

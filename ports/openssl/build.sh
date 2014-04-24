@@ -3,34 +3,36 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+BUILD_DIR=${SRC_DIR}
+INSTALL_TARGETS="install INSTALL_PREFIX=${DESTDIR}"
 
 ConfigureStep() {
-  local EXTRA_ARGS=""
-  local machine="i686"
-  if [ "${NACL_GLIBC}" != "1" ] ; then
-    local GLIBC_COMPAT=${NACLPORTS_INCLUDE}/glibc-compat
-    if [ ! -f ${GLIBC_COMPAT}/netdb.h ]; then
-      echo "Please install glibc-compat first"
-      exit 1
-    fi
-    EXTRA_ARGS+=" no-dso -I${GLIBC_COMPAT}"
+  if [ "${NACL_SHARED}" = "1" ] ; then
+    local EXTRA_ARGS="shared"
+  else
+    local EXTRA_ARGS="no-dso"
+  fi
+
+  if [ "${NACL_LIBC}" = "newlib" ] ; then
+    EXTRA_ARGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat"
     # The default from MACHINE=i686 is linux-elf, which links things
     # with -ldl. However, newlib does not have -ldl. In that case,
     # make a fake machine where the build rule does not use -ldl.
-    machine="le32newlib"
+    local machine="le32newlib"
+  else
+    local machine="i686"
   fi
 
-  ChangeDir ${NACL_PACKAGES_REPOSITORY}/${PACKAGE_NAME}
-  MACHINE=${machine} CC=${NACLCC} AR=${NACLAR} RANLIB=${NACLRANLIB} ./config \
-    --prefix=${NACLPORTS_PREFIX} no-asm no-hw no-krb5 ${EXTRA_ARGS} \
-    -D_GNU_SOURCE
+  MACHINE=${machine} CC=${NACLCC} AR=${NACLAR} RANLIB=${NACLRANLIB} \
+    LogExecute ./config \
+    --prefix=${PREFIX} no-asm no-hw no-krb5 ${EXTRA_ARGS} -D_GNU_SOURCE
 
   HackStepForNewlib
 }
 
 
 HackStepForNewlib() {
-  if [ "${NACL_GLIBC}" = "1" ]; then
+  if [ "${NACL_SHARED}" = "1" ]; then
     git checkout apps/Makefile
     git checkout test/Makefile
     return
@@ -47,11 +49,23 @@ HackStepForNewlib() {
 
 
 BuildStep() {
-  make clean
+  LogExecute make clean
   # The openssl build can fail when build with -jN.
   # TODO(sbc): Add -j${OS_JOBS} to this build if/when openssl is upgraded
   # to a version that supports parallel make.
-  make build_libs
+  LogExecute make build_libs
+}
+
+
+InstallStep() {
+  DefaultInstallStep
+  # openssl (for some reason) installs shared libraries with 555 (i.e.
+  # not writable.  This causes issues when create_nmf copies the libraries
+  # and then tries to overwrite them later.
+  if [ "${NACL_SHARED}" = "1" ] ; then
+    LogExecute chmod 644 ${DESTDIR_LIB}/libssl.so.*
+    LogExecute chmod 644 ${DESTDIR_LIB}/libcrypto.so.*
+  fi
 }
 
 
@@ -66,10 +80,11 @@ md5test hmactest wp_test rc2test rc4test rc5test bftest casttest \
 destest randtest dhtest dsatest ssltest rsa_test enginetest igetest \
 jpaketest srptest asn1test"
   local passing_tests="${all_tests}"
-  pushd test
+  ChangeDir test
+  export SEL_LDR_LIB_PATH=$PWD/..
   # Newlib can't build ssltest -- requires socket()
   # md2test, rc5test, jpaketest just segfaults w/ nacl-gcc-newlib and pnacl.
-  if [ "${NACL_GLIBC}" != "1" ]; then
+  if [ "${NACL_LIBC}" = "newlib" ]; then
     local broken_tests="md2test rc5test ssltest jpaketest"
     for to_filter in ${broken_tests}; do
       passing_tests=$(echo ${passing_tests} | sed "s/\b${to_filter}//g")
@@ -86,5 +101,4 @@ jpaketest srptest asn1test"
     RunSelLdrCommand ${test_name}
   done
   RunSelLdrCommand evp_test evptests.txt
-  popd
 }

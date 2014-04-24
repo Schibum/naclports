@@ -3,7 +3,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-BUILD_DIR=${NACL_PACKAGES_REPOSITORY}/${PACKAGE_NAME}
+BUILD_DIR=${SRC_DIR}
 
 ConfigureStep() {
   # export the nacl tools
@@ -11,8 +11,5 @@ ConfigureStep() {
   export CXX=${NACLCXX}
   export AR=${NACLAR}
   export RANLIB=${NACLRANLIB}
-  ChangeDir ${BUILD_DIR}
-  ./unmaintained/autogen.sh \
-    --host=nacl \
-    --prefix=${NACLPORTS_PREFIX}
+  ./unmaintained/autogen.sh --host=nacl --prefix=${PREFIX}
 }

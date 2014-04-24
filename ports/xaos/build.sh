@@ -3,68 +3,51 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-
-EXAMPLE_DIR=${NACL_SRC}/ports/xaos
 EXECUTABLES=bin/xaos
+NACL_CPPFLAGS+=" -D__NO_MATH_INLINES=1"
 
 PatchStep() {
   DefaultPatchStep
-  local src_dir="${NACL_PACKAGES_REPOSITORY}/${PACKAGE_NAME}"
   echo "copy nacl driver"
-  cp -r "${START_DIR}/nacl-ui-driver" "${src_dir}/src/ui/ui-drv/nacl"
+  cp -r "${START_DIR}/nacl-ui-driver" "${SRC_DIR}/src/ui/ui-drv/nacl"
 }
 
 ConfigureStep() {
-  # export the nacl tools
-  export CC=${NACLCC}
-  export CXX=${NACLCXX}
-  # NOTE: non-standard flag NACL_LDFLAGS because of some more hacking below
-  export CFLAGS="${NACLPORTS_CFLAGS} -D__NO_MATH_INLINES=1"
-  export LDFLAGS="${NACLPORTS_LDFLAGS} -Wl,--undefined=PPP_GetInterface \
-                  -Wl,--undefined=PPP_ShutdownModule \
-                  -Wl,--undefined=PPP_InitializeModule \
-                  -Wl,--undefined=original_main"
-  export AR=${NACLAR}
-  export RANLIB=${NACLRANLIB}
-  export PKG_CONFIG_PATH=${NACLPORTS_LIBDIR}/pkgconfig
-  export PKG_CONFIG_LIBDIR=${NACLPORTS_LIBDIR}
-
-  export LIBS="-L${NACLPORTS_LIBDIR} -lppapi \
-    -lpthread -l${NACL_CPP_LIB} -lm"
-
-  CONFIG_FLAGS="--with-png=no \
-      --with-long-double=no \
-      --host=nacl \
-      --with-x11-driver=no \
-      --with-sffe=no"
-
-  ChangeDir ${NACL_PACKAGES_REPOSITORY}/${PACKAGE_NAME}
-
   # xaos does not work with a build dir which is separate from the
   # src dir - so we copy src -> build
-  Remove ${NACL_BUILD_SUBDIR}
-  local tmp=${NACL_PACKAGES_REPOSITORY}/${PACKAGE_NAME}.tmp
+  ChangeDir ${SRC_DIR}
+  Remove ${BUILD_DIR}
+  local tmp=${SRC_DIR}.tmp
   Remove ${tmp}
-  cp -r ${NACL_PACKAGES_REPOSITORY}/${PACKAGE_NAME} ${tmp}
-  mv ${tmp} ${NACL_BUILD_SUBDIR}
+  cp -r ${SRC_DIR} ${tmp}
+  mv ${tmp} ${BUILD_DIR}
 
-  ChangeDir ${NACL_BUILD_SUBDIR}
+  ChangeDir ${BUILD_DIR}
   echo "running autoconf"
   LogExecute rm ./configure
   LogExecute autoconf
-  echo "Configure options: ${CONFIG_FLAGS}"
-  ./configure ${CONFIG_FLAGS}
+
+  NACLPORTS_LDFLAGS+=" -Wl,--undefined=PPP_GetInterface \
+                  -Wl,--undefined=PPP_ShutdownModule \
+                  -Wl,--undefined=PPP_InitializeModule \
+                  -Wl,--undefined=original_main"
+
+  export LIBS="-lppapi -lpthread -l${NACL_CPP_LIB} -lm"
+  SetupCrossEnvironment
+  LogExecute ./configure --with-png=no --with-long-double=no \
+      --host=nacl --with-x11-driver=no --with-sffe=no
+}
+
+BuildStep() {
+  SetupCrossEnvironment
+  DefaultBuildStep
 }
 
 InstallStep(){
-  local out_dir=${NACL_PACKAGES_REPOSITORY}/${PACKAGE_NAME}
-  local build_dir=${out_dir}/${NACL_BUILD_SUBDIR}
-  local publish_dir="${NACL_PACKAGES_PUBLISH}/${PACKAGE_NAME}"
-
-  MakeDir ${publish_dir}
-  install ${START_DIR}/xaos.html ${publish_dir}
-  install ${START_DIR}/xaos.nmf ${publish_dir}
+  MakeDir ${PUBLISH_DIR}
+  install ${START_DIR}/xaos.html ${PUBLISH_DIR}
+  install ${START_DIR}/xaos.nmf ${PUBLISH_DIR}
   # Not used yet
-  install ${build_dir}/help/xaos.hlp ${publish_dir}
-  install ${build_dir}/bin/xaos ${publish_dir}/xaos_${NACL_ARCH}${NACL_EXEEXT}
+  install ${BUILD_DIR}/help/xaos.hlp ${PUBLISH_DIR}
+  install ${BUILD_DIR}/bin/xaos ${PUBLISH_DIR}/xaos_${NACL_ARCH}${NACL_EXEEXT}
 }

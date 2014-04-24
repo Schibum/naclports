@@ -1,3 +1,0 @@
-PACKAGE_NAME=ruby_ppapi
-DISABLED_ARCH=pnacl
-DEPENDS=(ruby libtar glibc-compat nacl-spawn)

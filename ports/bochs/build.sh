@@ -3,7 +3,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-
 # Linux disk image
 readonly LINUX_IMG_URL=http://storage.googleapis.com/nativeclient-mirror/nacl/bochs-linux-img.tar.gz
 readonly LINUX_IMG_NAME=linux-img
@@ -12,32 +11,13 @@ BOCHS_EXAMPLE_DIR=${NACL_SRC}/ports/bochs
 EXECUTABLES=bochs
 
 ConfigureStep() {
-  # export the nacl tools
-  export CC=${NACLCC}
-  export CXX=${NACLCXX}
-  export AR=${NACLAR}
-  export RANLIB=${NACLRANLIB}
-  # path and package magic to make sure we call the right
-  # sdl-config, etc.
-  export PKG_CONFIG_PATH=${NACLPORTS_LIBDIR}/pkgconfig
-  export PKG_CONFIG_LIBDIR=${NACLPORTS_LIBDIR}
-  export CFLAGS=${NACLPORTS_CFLAGS}
-  export CXXFLAGS=${NACLPORTS_CXXFLAGS}
-  export LDFLAGS=${NACLPORTS_LDFLAGS}
-  export PATH=${NACL_BIN_PATH}:${PATH};
-  export PATH="${NACLPORTS_PREFIX_BIN}:${PATH}"
+  SetupCrossEnvironment
 
-  export NACLBXLIBS="-lpthread"
+  export EXTRA_LINK_OPTS="-L${NACLPORTS_LIBDIR} -ltar -lnacl_io -lpthread"
 
-  MakeDir ${NACL_PACKAGES_REPOSITORY}/${PACKAGE_NAME}/${NACL_BUILD_SUBDIR}
-  ChangeDir ${NACL_PACKAGES_REPOSITORY}/${PACKAGE_NAME}/${NACL_BUILD_SUBDIR}
-
-  EXE=${NACL_EXEEXT} LogExecute ../configure \
+  EXE=${NACL_EXEEXT} LogExecute ${SRC_DIR}/configure \
     --host=nacl \
-    --prefix=${NACLPORTS_PREFIX} \
-    --exec-prefix=${NACLPORTS_PREFIX} \
-    --libdir=${NACLPORTS_LIBDIR} \
-    --oldincludedir=${NACLPORTS_INCLUDE} \
+    --prefix=${PREFIX} \
     --with-x=no \
     --with-x11=no \
     --with-sdl=yes \
@@ -46,7 +26,7 @@ ConfigureStep() {
 
 ImageExtractStep() {
   Banner "Untaring $1 to $2"
-  ChangeDir ${NACL_PACKAGES_REPOSITORY}
+  ChangeDir ${WORK_DIR}
   Remove $2
   if [ $OS_SUBDIR = "windows" ]; then
     tar --no-same-owner -zxf ${NACL_PACKAGES_TARBALLS}/$1
@@ -55,18 +35,22 @@ ImageExtractStep() {
   fi
 }
 
-InstallStep() {
-  BOCHS_DIR=${NACL_PACKAGES_REPOSITORY}/${PACKAGE_NAME}
-  BOCHS_BUILD=${BOCHS_DIR}/${NACL_BUILD_SUBDIR}
+BuildStep() {
+  # boch's Makefile runs sdl-config so we need to cross envrionment setup
+  # during build as well as configure.
+  SetupCrossEnvironment
+  DefaultBuildStep
+}
 
-  ChangeDir ${BOCHS_DIR}
+InstallStep() {
+  ChangeDir ${SRC_DIR}
   mkdir -p img/usr/local/share/bochs/
-  cp -r ${NACL_PACKAGES_REPOSITORY}/${LINUX_IMG_NAME} img/
+  cp -r ${WORK_DIR}/${LINUX_IMG_NAME} img/
   mv img/linux-img/bochsrc old-bochsrc
   cp ${START_DIR}/bochsrc img/linux-img/bochsrc
-  cp -r ${BOCHS_DIR}/bios/VGABIOS-lgpl-latest img/
-  cp -r ${BOCHS_DIR}/bios/BIOS-bochs-latest img/
-  cp -r ${BOCHS_DIR}/msrs.def img/
+  cp -r ${SRC_DIR}/bios/VGABIOS-lgpl-latest img/
+  cp -r ${SRC_DIR}/bios/BIOS-bochs-latest img/
+  cp -r ${SRC_DIR}/msrs.def img/
 
   MakeDir ${PUBLISH_DIR}
 
@@ -74,8 +58,8 @@ InstallStep() {
   tar cf ${PUBLISH_DIR}/img.tar .
   cd ..
 
-  cp ${START_DIR}/bochs.html ${PUBLISH_DIR}
-  cp ${BOCHS_BUILD}/bochs ${PUBLISH_DIR}/bochs_${NACL_ARCH}${NACL_EXEEXT}
+  LogExecute cp ${START_DIR}/bochs.html ${PUBLISH_DIR}
+  LogExecute cp ${BUILD_DIR}/bochs ${PUBLISH_DIR}/bochs_${NACL_ARCH}${NACL_EXEEXT}
 
   if [ ${NACL_ARCH} = pnacl ]; then
     sed -i.bak 's/x-nacl/x-pnacl/g' ${PUBLISH_DIR}/bochs.html

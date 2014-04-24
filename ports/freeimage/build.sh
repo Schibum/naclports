@@ -3,6 +3,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+BUILD_DIR=${SRC_DIR}
+
 # This list of files needs to have CRLF (Windows)-style line endings translated
 # to LF (*nix)-style line endings prior to applying the patch.  This list of
 # files is taken from nacl-FreeImage-3.14.1.patch.
@@ -17,12 +19,6 @@ readonly -a CRLF_TRANSLATE_FILES=(
     "Source/Utilities.h")
 
 
-# The FreeImage zipfile, unlike other naclports contains a folder
-# called FreeImage rather than FreeImage-X-Y-Z, so we set a customr
-# PACKAGE_DIR here.
-PACKAGE_DIR=FreeImage
-
-
 
 ExtractStep() {
   DefaultExtractStep
@@ -31,7 +27,7 @@ ExtractStep() {
   # recursive tr over all the sources to remedy this.
   # Setting LC_CTYPE is a Mac thing.  The locale needs to be set to "C" so that
   # tr interprets the '\r' string as ASCII and not UTF-8.
-  ChangeDir ${NACL_PACKAGES_REPOSITORY}/${PACKAGE_DIR}
+  ChangeDir ${SRC_DIR}
   export
   for crlf in ${CRLF_TRANSLATE_FILES[@]}; do
     echo "tr -d '\r' < ${crlf}"
@@ -42,19 +38,18 @@ ExtractStep() {
 
 
 ConfigureStep() {
+  return
+}
+
+
+BuildStep() {
   # export the nacl tools
   export CC=${NACLCC}
   export CXX=${NACLCXX}
   export AR=${NACLAR}
   export RANLIB=${NACLRANLIB}
-  export PATH=${NACL_BIN_PATH}:${PATH};
-  export INCDIR=${NACLPORTS_INCLUDE}
-  export INSTALLDIR=${NACLPORTS_LIBDIR}
-  ChangeDir ${NACL_PACKAGES_REPOSITORY}/${PACKAGE_DIR}
-}
+  export PATH=${NACL_BIN_PATH}:${PATH}
 
-
-BuildStep() {
   # assumes pwd has makefile
   LogExecute make OS=nacl clean
   LogExecute make OS=nacl -j${OS_JOBS}
@@ -62,6 +57,7 @@ BuildStep() {
 
 
 InstallStep() {
-  # assumes pwd has makefile
-  make OS=nacl install
+  export INCDIR=${DESTDIR_INCLUDE}
+  export INSTALLDIR=${DESTDIR_LIB}
+  LogExecute make OS=nacl install
 }

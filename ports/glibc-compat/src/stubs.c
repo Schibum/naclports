@@ -194,6 +194,21 @@ int listen(int sockfd, int backlog) {
   UNIMPLEMENTED_FATAL();
 }
 
+dev_t makedev(int maj, int min)  __attribute__((weak));
+dev_t makedev(int maj, int min) {
+  return ((maj & 0xff) << 8 | (min & 0xff));
+}
+
+int major(dev_t dev) __attribute__((weak));
+int major(dev_t dev) {
+  return (dev >> 8) & 0xff;
+}
+
+int minor(dev_t dev) __attribute__((weak));
+int minor(dev_t dev) {
+  return dev & 0xff;
+}
+
 uint32_t ntohl(uint32_t netlong) __attribute__((weak));
 uint32_t ntohl(uint32_t netlong) {
   UNIMPLEMENTED_FATAL();
@@ -386,4 +401,27 @@ int connect(int sockfd, const struct sockaddr *addr,
 int connect(int sockfd, const struct sockaddr *addr,
                    socklen_t addrlen) {
   UNIMPLEMENTED_FATAL();
+}
+
+char* realpath(const char* path, const char* resolved) __attribute__ ((weak));
+char* realpath(const char* path, const char* resolved) {
+  UNIMPLEMENTED_NOSYS_RTN(NULL);
+}
+
+int getaddrinfo(const char *, const char *, const struct addrinfo *,
+                struct addrinfo **) __attribute__ ((weak));
+int getaddrinfo(const char *node, const char *service,
+                const struct addrinfo *hints, struct addrinfo **res) {
+  errno = ENOSYS;
+  UNIMPLEMENTED_NOSYS_RTN(EAI_SYSTEM);
+}
+
+void freeaddrinfo(struct addrinfo *) __attribute__ ((weak));
+void freeaddrinfo(struct addrinfo *res) {
+  UNIMPLEMENTED();
+}
+
+char *gai_strerror(int) __attribute__ ((weak));
+char *gai_strerror(int errcode) {
+  UNIMPLEMENTED_NOSYS_RTN(NULL);
 }

@@ -3,41 +3,36 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-BUILD_DIR=${NACL_PACKAGES_REPOSITORY}/${PACKAGE_NAME}
+BUILD_DIR=${SRC_DIR}
+
+export LIB_OSG=libosg.a
+export LIB_OSGUTIL=libosgUtil.a
+export LIB_OPENTHREADS=libOpenThreads.a
 
 ConfigureStep() {
   return 0
 }
 
 BuildStep() {
-  # export the nacl tools
-  export CC=${NACLCC}
-  export CXX=${NACLCXX}
-  export AR=${NACLAR}
-  export RANLIB=${NACLRANLIB}
-  export CFLAGS=${NACLPORTS_CFLAGS}
-  export CXXFLAGS=${NACLPORTS_CXXFLAGS}
-  export LDFLAGS=${NACLPORTS_LDFLAGS}
-  export PATH=${NACL_BIN_PATH}:${PATH};
-  export LIB_OSG=libosg.a
-  export LIB_OSGUTIL=libosgUtil.a
-  export LIB_OPENTHREADS=libOpenThreads.a
+  SetupCrossEnvironment
+  CFLAGS+=" ${CPPFLAGS}"
+  CXXFLAGS+=" ${CPPFLAGS}"
   DefaultBuildStep
 }
 
-
 InstallStep() {
-  Remove ${NACLPORTS_INCLUDE}/osg
-  Remove ${NACLPORTS_INCLUDE}/osgUtil
-  Remove ${NACLPORTS_INCLUDE}/OpenThreads
-  readonly THIS_PACKAGE_PATH=${NACL_PACKAGES_REPOSITORY}/${PACKAGE_NAME}
-  cp -R include/osg ${NACLPORTS_INCLUDE}/osg
-  cp -R include/osgUtil ${NACLPORTS_INCLUDE}/osgUtil
-  cp -R include/OpenThreads ${NACLPORTS_INCLUDE}/OpenThreads
-  Remove ${NACLPORTS_LIBDIR}/libosg.a
-  Remove ${NACLPORTS_LIBDIR}/libosgUtil.a
-  Remove ${NACLPORTS_LIBDIR}/libOpenThreads.a
-  install -m 644 ${LIB_OSG} ${NACLPORTS_LIBDIR}/${LIB_OSG}
-  install -m 644 ${LIB_OSGUTIL} ${NACLPORTS_LIBDIR}/${LIB_OSGUTIL}
-  install -m 644 ${LIB_OPENTHREADS} ${NACLPORTS_LIBDIR}/${LIB_OPENTHREADS}
+  MakeDir ${DESTDIR_LIB}
+  MakeDir ${DESTDIR_INCLUDE}
+  Remove ${DESTDIR_INCLUDE}/osg
+  Remove ${DESTDIR_INCLUDE}/osgUtil
+  Remove ${DESTDIR_INCLUDE}/OpenThreads
+  LogExecute cp -R include/osg ${DESTDIR_INCLUDE}/osg
+  LogExecute cp -R include/osgUtil ${DESTDIR_INCLUDE}/osgUtil
+  LogExecute cp -R include/OpenThreads ${DESTDIR_INCLUDE}/OpenThreads
+  Remove ${DESTDIR_LIB}/libosg.a
+  Remove ${DESTDIR_LIB}/libosgUtil.a
+  Remove ${DESTDIR_LIB}/libOpenThreads.a
+  install -m 644 ${LIB_OSG} ${DESTDIR_LIB}/${LIB_OSG}
+  install -m 644 ${LIB_OSGUTIL} ${DESTDIR_LIB}/${LIB_OSGUTIL}
+  install -m 644 ${LIB_OPENTHREADS} ${DESTDIR_LIB}/${LIB_OPENTHREADS}
 }

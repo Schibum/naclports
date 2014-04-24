@@ -3,24 +3,16 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+CONFIG_SUB=build-aux/config.sub
 
-ConfigureStep() {
-  # export the nacl tools
-  export CC=${NACLCC}
-  export CXX=${NACLCXX}
-  export AR=${NACLAR}
-  export RANLIB=${NACLRANLIB}
-  export PATH=${NACL_BIN_PATH}:${PATH};
-  export LIB_GMOCK=libgmock.a
-
-  ChangeDir ${NACL_PACKAGES_REPOSITORY}/${PACKAGE_NAME}
+PatchStep() {
+  DefaultPatchStep
+  CONFIG_SUB=gtest/build-aux/config.sub
+  PatchConfigSub
 }
 
-
 InstallStep() {
-  Remove ${NACLPORTS_INCLUDE}/gmock
-  readonly THIS_PACKAGE_PATH=${NACL_PACKAGES_REPOSITORY}/${PACKAGE_NAME}
-  (ChangeDir include; tar cf - gmock | (ChangeDir ${NACLPORTS_INCLUDE}; tar xfp -))
-  Remove ${NACLPORTS_LIBDIR}/${LIB_GMOCK}
-  install -m 644 ${LIB_GMOCK} ${NACLPORTS_LIBDIR}/${LIB_GMOCK}
+  LogExecute tar -C ${SRC_DIR}/include -cf - gmock | \
+    tar -C ${DESTDIR_INCLUDE} -xpf -
+  LogExecute install -m 644 lib/.libs/libgmock.a ${DESTDIR_LIB}/
 }

@@ -4,9 +4,8 @@
 # found in the LICENSE file.
 
 
-
 ConfigureStep() {
-  if [ "${NACL_GLIBC}" != 1 ]; then
+  if [ "${NACL_LIBC}" = "newlib" ]; then
     export LIBS="-lglibc-compat"
   fi
   EXTRA_CONFIGURE_ARGS+=" --disable-oggtest"
@@ -30,6 +29,7 @@ PostConfigureStep() {
 
 InstallStep() {
   # assumes pwd has makefile
-  make install-exec
-  (cd include; make install)
+  LogExecute make install-exec DESTDIR=${DESTDIR}
+  ChangeDir include
+  LogExecute make install DESTDIR=${DESTDIR}
 }

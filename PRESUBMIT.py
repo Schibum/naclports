@@ -5,6 +5,7 @@
 # Documentation on PRESUBMIT.py can be found at:
 # http://www.chromium.org/developers/how-tos/depottools/presubmit-scripts
 
+import os
 import subprocess
 
 
@@ -15,10 +16,14 @@ _EXCLUDED_PATHS = (
 )
 
 def CheckBuildbot(input_api, output_api):
-  try:
-    subprocess.check_call('build_tools/bots/test.sh')
-  except subprocess.CalledProcessError as e:
-    return [output_api.PresubmitError('build_tools/bots/test.sh failed')]
+  # Test various partition sizes.
+  for parts in [1, 3, 4]:
+    for index in range(parts):
+      cmd = ['build_tools/partition.py', '-t', str(index), '-n', str(parts)]
+      try:
+        subprocess.check_call(cmd, stdout=open(os.devnull, 'w'))
+      except subprocess.CalledProcessError as e:
+        return [output_api.PresubmitError('%s failed' % str(cmd))]
   return []
 
 def CheckMirror(input_api, output_api):

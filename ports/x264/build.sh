@@ -6,15 +6,7 @@
 BUILD_DIR=${SRC_DIR}
 
 ConfigureStep() {
-  # export the nacl tools
-  export CC=${NACLCC}
-  export CXX=${NACLCXX}
-  export AR=${NACLAR}
-  export RANLIB=${NACLRANLIB}
-  export PKG_CONFIG_PATH=${NACLPORTS_LIBDIR}/pkgconfig
-  export PKG_CONFIG_LIBDIR=${NACLPORTS_LIBDIR}
-  export PATH=${NACL_BIN_PATH}:${PATH};
-  ChangeDir ${NACL_PACKAGES_REPOSITORY}/${PACKAGE_NAME}
+  SetupCrossEnvironment
 
   local conf_host
   if [ "${NACL_ARCH}" = pnacl ]; then
@@ -24,12 +16,11 @@ ConfigureStep() {
   fi
 
   LogExecute ./configure \
+    --host=${conf_host} \
+    --prefix=${PREFIX} \
     --cross-prefix=${NACL_CROSS_PREFIX} \
     --disable-asm \
     --disable-opencl \
-    --prefix=${NACLPORTS_PREFIX} \
-    --exec-prefix=${NACLPORTS_PREFIX} \
-    --libdir=${NACLPORTS_LIBDIR} \
     --extra-ldflags="-lm" \
     --disable-cli \
     --host=${conf_host} \

@@ -1,4 +1,5 @@
-PACKAGE_NAME=x264-snapshot-20131219-2245-stable
+NAME=x264
+VERSION=snapshot-20131219-2245-stable
 URL=http://downloads.videolan.org/pub/videolan/x264/snapshots/x264-snapshot-20131219-2245-stable.tar.bz2
 LICENSE=GPL2
-SHA1=3ed3b9804822b8ff16374aee18c91a8750902341
+SHA1=e0d7344b17c6f67eae1952910b9581664381a7fd

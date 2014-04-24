@@ -3,7 +3,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-
 # Beneath a Steel Sky (floppy version)
 readonly BASS_FLOPPY_URL=http://storage.googleapis.com/nativeclient-mirror/nacl/scummvm_games/bass/BASS-Floppy-1.3.zip
 readonly BASS_FLOPPY_NAME=BASS-Floppy-1.3
@@ -19,25 +18,9 @@ ConfigureStep() {
   # NOTE: We can't use the DefaultConfigureStep, because the scummvm
   # configure script is hand-rolled, and won't accept additional arguments.
   # export the nacl tools
-  export CC=${NACLCC}
-  export CXX=${NACLCXX}
-  export AR=${NACLAR}
   # without this setting *make* will not show the full command lines
   export VERBOSE_BUILD=1
-  export RANLIB=${NACLRANLIB}
-  export PKG_CONFIG_PATH=${NACLPORTS_LIBDIR}/pkgconfig
-  export PKG_CONFIG_LIBDIR=${NACLPORTS_LIBDIR}
-  export CFLAGS=${NACLPORTS_CFLAGS}
-  export CXXFLAGS=${NACLPORTS_CXXFLAGS}
-  export LDFLAGS=${NACLPORTS_LDFLAGS}
-  export PATH="${NACL_BIN_PATH}:${PATH}"
-  export PATH="${NACLPORTS_PREFIX_BIN}:${PATH}"
-  if [ ! -f "${NACL_CONFIGURE_PATH:-${SRC_DIR}/configure}" ]; then
-    echo "No configure script found"
-    return
-  fi
-  MakeDir ${BUILD_DIR}
-  ChangeDir ${BUILD_DIR}
+  SetupCrossEnvironment
 
   local conf_host=${NACL_CROSS_PREFIX}
   if [ "${NACL_ARCH}" = "pnacl" ]; then
@@ -51,9 +34,9 @@ ConfigureStep() {
 
   # NOTE: disabled mt32emu because it using inline assembly that won't
   #     validate.
-  ../configure \
+  ${SRC_DIR}/configure \
+    --prefix=${PREFIX} \
     --host=${conf_host} \
-    --libdir=${NACLPORTS_LIBDIR} \
     --disable-flac \
     --disable-zlib \
     --disable-mt32emu \
@@ -66,8 +49,7 @@ ConfigureStep() {
 InstallStep() {
   SCUMMVM_DIR=runimage/usr/local/share/scummvm
   ChangeDir ${SRC_DIR}
-
-  mkdir -p ${SCUMMVM_DIR}
+  MakeDir ${SCUMMVM_DIR}
   cp gui/themes/scummclassic.zip \
      dists/engine-data/sky.cpt \
      gui/themes/scummmodern.zip \
@@ -86,7 +68,7 @@ InstallStep() {
   #Beneath a Steel Sky (Floppy version)
   BASS_DIR=bass/usr/local/share/scummvm/${BASS_FLOPPY_NAME}
   mkdir -p ${BASS_DIR}
-  cp -r ${NACL_PACKAGES_REPOSITORY}/${BASS_FLOPPY_NAME}/* ${BASS_DIR}
+  cp -r ${WORK_DIR}/${BASS_FLOPPY_NAME}/* ${BASS_DIR}
   cd bass
   tar cf ../bass.tar ./
   cd ..
@@ -94,7 +76,7 @@ InstallStep() {
   #Lure of the temptress
   LURE_DIR=lure/usr/local/share/scummvm
   mkdir -p ${LURE_DIR}
-  cp -r ${NACL_PACKAGES_REPOSITORY}/${LURE_NAME}/* ${LURE_DIR}
+  cp -r ${WORK_DIR}/${LURE_NAME}/* ${LURE_DIR}
   cd lure
   tar cf ../lure.tar ./
   cd ..
@@ -108,10 +90,10 @@ InstallStep() {
   cp ${START_DIR}/packaged_app/* ${ASSEMBLY_DIR}
   cp ${SRC_DIR}/*.tar ${ASSEMBLY_DIR}
   if [ "${NACL_DEBUG}" = "1" ]; then
-    cp ${SRC_DIR}/${NACL_BUILD_SUBDIR}/scummvm \
+    cp ${BUILD_DIR}/scummvm \
         ${ASSEMBLY_DIR}/scummvm_${NACL_ARCH}${NACL_EXEEXT}
   else
-    ${NACLSTRIP} ${SRC_DIR}/${NACL_BUILD_SUBDIR}/scummvm \
+    ${NACLSTRIP} ${BUILD_DIR}/scummvm \
         -o ${ASSEMBLY_DIR}/scummvm_${NACL_ARCH}${NACL_EXEEXT}
   fi
 
@@ -151,21 +133,18 @@ DownloadZipStep() {
 
 ExtractGameZipStep() {
   Banner "Unzipping ${PACKAGE_NAME}.zip"
-  ChangeDir ${NACL_PACKAGES_REPOSITORY}
-  Remove ${PACKAGE_DIR}
-  unzip -d ${PACKAGE_DIR} ${NACL_PACKAGES_TARBALLS}/${PACKAGE_NAME}.zip
+  ChangeDir ${WORK_DIR}
+  Remove ${1}
+  unzip -d ${1} ${NACL_PACKAGES_TARBALLS}/${PACKAGE_NAME}.zip
 }
 
 GameGetStep() {
   PACKAGE_NAME_TEMP=${PACKAGE_NAME}
-  PACKAGE_DIR_TEMP=${PACKAGE_DIR}
   PACKAGE_NAME=$2
-  PACKAGE_DIR=$2
   SHA1=${SCUMMVM_EXAMPLE_DIR}/$2/$2.sha1
   DownloadZipStep $1 $2 ${SHA1}
-  ExtractGameZipStep
+  ExtractGameZipStep $2
   PACKAGE_NAME=${PACKAGE_NAME_TEMP}
-  PACKAGE_DIR=${PACKAGE_DIR_TEMP}
 }
 
 DownloadStep() {

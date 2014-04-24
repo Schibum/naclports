@@ -10,7 +10,8 @@ EXECUTABLES=python${NACL_EXEEXT}
 # The build relies on certain host binaries and python's configure
 # requires us to set --build= as well as --host=.
 
-HOST_BUILD_DIR=${NACL_PACKAGES_REPOSITORY}/${PACKAGE_DIR}/build-nacl-host
+HOST_BUILD_DIR=${WORK_DIR}/build-nacl-host
+export PATH=${HOST_BUILD_DIR}/inst/usr/local/bin:${PATH}
 
 BuildHostPython() {
   MakeDir ${HOST_BUILD_DIR}
@@ -18,14 +19,14 @@ BuildHostPython() {
   if [ -f python -a -f Parser/pgen ]; then
     return
   fi
-  LogExecute ../configure
-  LogExecute make -j${OS_JOBS} bininstall libinstall sharedinstall DESTDIR=inst
+  LogExecute ${SRC_DIR}/configure
+  LogExecute make -j${OS_JOBS} build_all
+  LogExecute make install DESTDIR=inst
 }
 
 ConfigureStep() {
   BuildHostPython
-  export CROSS_COMPILE=true
-  export PATH=${HOST_BUILD_DIR}/inst/usr/local/bin:${PATH}
+  ChangeDir ${BUILD_DIR}
   # We pre-seed configure with certain results that it cannot determine
   # since we are doing a cross compile.  The $CONFIG_SITE file is sourced
   # by configure early on.
@@ -36,21 +37,25 @@ ConfigureStep() {
   EXTRA_CONFIGURE_ARGS="--disable-ipv6"
   EXTRA_CONFIGURE_ARGS+=" --with-suffix=${NACL_EXEEXT}"
   EXTRA_CONFIGURE_ARGS+=" --build=x86_64-linux-gnu"
-  export MAKEFLAGS="PGEN=../build-nacl-host/Parser/pgen"
   export LIBS="-ltermcap"
-  if [ "${NACL_GLIBC}" != "1" ]; then
+  if [ "${NACL_LIBC}" = "newlib" ]; then
     LIBS+=" -lglibc-compat"
   fi
   DefaultConfigureStep
-  if [ "${NACL_GLIBC}" != "1" ]; then
+  if [ "${NACL_LIBC}" = "newlib" ]; then
     LogExecute cp ${START_DIR}/Setup.local Modules/
   fi
 }
 
+BuildStep() {
+  export CROSS_COMPILE=true
+  export MAKEFLAGS="PGEN=${WORK_DIR}/build-nacl-host/Parser/pgen"
+  SetupCrossEnvironment
+  DefaultBuildStep
+}
+
 TestStep() {
-  if [ ${NACL_ARCH} != "pnacl" ]; then
-    WriteSelLdrScript python python${NACL_EXEEXT}
-  else
+  if [ ${NACL_ARCH} = "pnacl" ]; then
     local pexe=python${NACL_EXEEXT}
     TranslateAndWriteSelLdrScript ${pexe} x86-64 python.x86-64.nexe python
   fi

@@ -4,19 +4,19 @@
 # found in the LICENSE file.
 
 
-if [ "${NACL_GLIBC}" = "1" ]; then
+if [ "${NACL_SHARED}" = "1" ]; then
   EXECUTABLES=util/.libs/rgb2gif${NACL_EXEEXT}
 else
   EXECUTABLES=util/rgb2gif${NACL_EXEEXT}
 fi
 
 RunTest() {
-  util/rgb2gif -s 320 200  < ../tests/porsche.rgb > porsche.gif
+  util/rgb2gif -s 320 200  < ${SRC_DIR}/tests/porsche.rgb > porsche.gif
   # TODO(sbc): do some basic checks on the resulting porsche.gif
 }
 
 TestStep() {
-  if [ "${NACL_GLIBC}" = "1" ]; then
+  if [ "${NACL_LIBC}" = "glibc" ]; then
     # TODO(sbc): find out why glibc version of rgb2gif is crashing
     return
   fi
@@ -29,11 +29,7 @@ TestStep() {
     (cd util;
      TranslateAndWriteSelLdrScript ${pexe} x86-64 rgb2gif.x86-64.nexe rgb2gif)
     RunTest
-  elif [ "${NACL_GLIBC}" = "1" ]; then
-    WriteSelLdrScript util/rgb2gif .libs/rgb2gif${NACL_EXEEXT}
-    RunTest
   else
-    WriteSelLdrScript util/rgb2gif rgb2gif${NACL_EXEEXT}
     RunTest
   fi
 }
@@ -44,6 +40,6 @@ BuildStep() {
   # avoid the 'doc' directory which has a dependency on 'xmlto'.
   # If 'xmlto' were added to the host build dependencies this could
   # be removed.
-  export PATH=${NACL_BIN_PATH}:${PATH};
+  export PATH=${NACL_BIN_PATH}:${PATH}
   make -j${OS_JOBS} SUBDIRS="lib util"
 }

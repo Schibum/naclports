@@ -3,15 +3,15 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-
 EXECUTABLES=civetweb
+BUILD_DIR=${SRC_DIR}
 
 BuildStep() {
-  export CFLAGS="${NACLPORTS_CFLAGS}"
+  export CFLAGS="${NACLPORTS_CPPFLAGS} ${NACLPORTS_CFLAGS}"
   export LDFLAGS="${NACLPORTS_LDFLAGS}"
 
   CFLAGS+=" -DNO_SSL -DNO_CGI"
-  if [ "${NACL_GLIBC}" = "1" ]; then
+  if [ "${NACL_LIBC}" = "glibc" ]; then
     LDFLAGS+=" -ldl"
   fi
 
@@ -42,9 +42,11 @@ PublishStep() {
 }
 
 InstallStep() {
-  LogExecute cp libcivetweb.a $NACL_TOOLCHAIN_PREFIX/lib
-  MakeDir $NACL_TOOLCHAIN_PREFIX/include/civetweb
-  LogExecute cp include/civetweb.h $NACL_TOOLCHAIN_PREFIX/include/civetweb
-  LogExecute cp include/CivetServer.h $NACL_TOOLCHAIN_PREFIX/include/civetweb
+  MakeDir ${DESTDIR_LIB}
+  MakeDir ${DESTDIR_INCLUDE}
+  LogExecute cp libcivetweb.a ${DESTDIR_LIB}
+  MakeDir ${DESTDIR_INCLUDE}/civetweb
+  LogExecute cp include/civetweb.h ${DESTDIR_INCLUDE}/civetweb
+  LogExecute cp include/CivetServer.h ${DESTDIR_INCLUDE}/civetweb
   PublishStep
 }
