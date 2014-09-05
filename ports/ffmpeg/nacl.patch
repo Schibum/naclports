@@ -20,3 +20,16 @@ index dba6089..b67a8c4 100644
      struct rusage rusage;
      getrusage(RUSAGE_SELF, &rusage);
      return (int64_t)rusage.ru_maxrss * 1024;
+diff --git a/libavcodec/libvpxenc.c b/libavcodec/libvpxenc.c
+index 8ebf052..c665125 100644
+--- a/libavcodec/libvpxenc.c
++++ b/libavcodec/libvpxenc.c
+@@ -289,7 +289,7 @@ static av_cold int vpx_init(AVCodecContext *avctx,
+     if (avctx->rc_min_rate == avctx->rc_max_rate &&
+         avctx->rc_min_rate == avctx->bit_rate && avctx->bit_rate)
+         enccfg.rc_end_usage = VPX_CBR;
+-    else if (ctx->crf)
++    else if (ctx->crf || avctx->bit_rate == 0)
+         enccfg.rc_end_usage = VPX_CQ;
+ 
+     if (avctx->bit_rate) {
