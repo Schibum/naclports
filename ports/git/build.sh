@@ -1,15 +1,22 @@
-#!/bin/bash
 # Copyright (c) 2013 The Native Client Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-export EXTRA_LIBS=\
-"-lppapi -lppapi_cpp -lppapi_simple -lcli_main -lnacl_io -lnacl_spawn"
+EXECUTABLES="git git-remote-http"
 
 # Do a verbose build so we're confident it's hitting nacl's tools.
 MAKE_TARGETS="V=1"
 BUILD_DIR=${SRC_DIR}
 export CROSS_COMPILE=1
+export EXTLIBS+="${NACL_CLI_MAIN_LIB} \
+-lppapi_simple -lnacl_spawn -lnacl_io -lppapi -lppapi_cpp -l${NACL_CPP_LIB}"
+
+if [ "${NACL_SHARED}" != "1" ]; then
+  # These are needed so that the configure can detect libcurl when statically
+  # linked.
+ export LIBS="-lcurl -lssl -lcrypto -lz"
+ EXTLIBS+=" -lglibc-compat"
+fi
 
 if [ ${OS_NAME} = "Darwin" ]; then
   # gettext (msgfmt) doesn't exist on darwin by default.  homebrew installs
@@ -24,7 +31,7 @@ ConfigureStep() {
 
   if [ "${NACL_LIBC}" = "newlib" ]; then
     NACLPORTS_CPPFLAGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat"
-    NACLPORTS_LDFLAGS+=" -lglibc-compat"
+    LIBS+=" -lglibc-compat"
   fi
 
   if [ "${NACL_LIBC}" = "glibc" ]; then
@@ -46,15 +53,5 @@ BuildStep() {
 }
 
 InstallStep() {
-  MakeDir ${PUBLISH_DIR}
-  for name in $(cat ${START_DIR}/git_binaries.txt); do
-    cp ${name} ${PUBLISH_DIR}/${name}_${NACL_ARCH}${NACL_EXEEXT}
-
-    pushd ${PUBLISH_DIR}
-    LogExecute python ${NACL_SDK_ROOT}/tools/create_nmf.py \
-        ${PUBLISH_DIR}/${name}_*${NACL_EXEEXT} \
-        -s . \
-        -o ${name}.nmf
-    popd
-  done
+  PublishByArchForDevEnv
 }

@@ -2,3 +2,4 @@ NAME=python-ppapi
 VERSION=0.1
 LICENSE=BSD
 DEPENDS=(python libtar nacl-spawn)
+DISABLED_LIBC=(bionic)

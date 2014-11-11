@@ -1,11 +1,15 @@
-#!/bin/bash
 # Copyright (c) 2011 The Native Client Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
 BUILD_DIR=${SRC_DIR}
 MAKE_TARGETS=mtest
-export EXEEXT=${NACL_EXEEXT}
+EXECUTABLES=mtest/mtest${NACL_EXEEXT}
+
+BuildStep() {
+  SetupCrossEnvironment
+  DefaultBuildStep
+}
 
 #TestStep() {
   # To run tests, pipe mtest.nexe output into test.nexe input

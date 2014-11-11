@@ -1,4 +1,3 @@
-#!/bin/bash
 # Copyright (c) 2012 The Native Client Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -13,7 +12,9 @@ EXECUTABLES=bochs
 ConfigureStep() {
   SetupCrossEnvironment
 
-  export EXTRA_LINK_OPTS="-L${NACLPORTS_LIBDIR} -ltar -lnacl_io -lpthread"
+  EXTRA_LINK_OPTS="-L${NACLPORTS_LIBDIR}"
+  EXTRA_LINK_OPTS+=" -lppapi_simple -lppapi_cpp -ltar -lnacl_io"
+  export EXTRA_LINK_OPTS
 
   EXE=${NACL_EXEEXT} LogExecute ${SRC_DIR}/configure \
     --host=nacl \
@@ -29,9 +30,9 @@ ImageExtractStep() {
   ChangeDir ${WORK_DIR}
   Remove $2
   if [ $OS_SUBDIR = "windows" ]; then
-    tar --no-same-owner -zxf ${NACL_PACKAGES_TARBALLS}/$1
+    tar --no-same-owner -zxf ${NACL_PACKAGES_CACHE}/$1
   else
-    tar zxf ${NACL_PACKAGES_TARBALLS}/$1
+    tar zxf ${NACL_PACKAGES_CACHE}/$1
   fi
 }
 
@@ -83,7 +84,7 @@ CustomCheck() {
 }
 
 ImageDownloadStep() {
-  cd ${NACL_PACKAGES_TARBALLS}
+  cd ${NACL_PACKAGES_CACHE}
   # if matching tarball already exists, don't download again
   if ! CustomCheck $3; then
     Fetch $1 $2.tar.gz

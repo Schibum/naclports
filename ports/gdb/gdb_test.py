@@ -11,8 +11,8 @@ import sys
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(SCRIPT_DIR, '../..'))
 SRC_DIR = os.path.dirname(os.path.dirname(SCRIPT_DIR))
-# TODO(bradnelson): Figure out a way to avoid referencing the libc.
-GDB_OUT_DIR = os.path.join(SRC_DIR, 'out/publish/gdb/glibc')
+TOOLCHAIN = os.environ.get('TOOLCHAIN', 'newlib')
+GDB_OUT_DIR = os.path.join(SRC_DIR, 'out/publish/gdb', TOOLCHAIN)
 
 import chrome_test
 
@@ -24,6 +24,7 @@ test_out_dir = os.path.join(GDB_OUT_DIR, 'tests')
 chrome_test.Main([
     '-C', test_dir,
     '-C', test_out_dir,
+    '-t', '60',
     '--enable-nacl',
     '--enable-nacl-debug',
     '--load-and-launch-app', gdb_app,

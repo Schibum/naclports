@@ -4,40 +4,42 @@
 
 """Test harness for testing chrome apps / extensions."""
 
+import argparse
 import cStringIO
 import contextlib
 import hashlib
 import logging
-import optparse
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import threading
+import urllib
 import urllib2
 import urlparse
 import zipfile
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.dirname(SCRIPT_DIR)
-sys.path.insert(0, SRC_DIR)
+sys.path.insert(0, os.path.join(SRC_DIR, 'build_tools'))
 
 import httpd
 
 
 # Pinned chrome revision. Update this to pull in a new chrome.
 # Try to select a version that exists on all platforms.
-CHROME_REVISION = 256094
+CHROME_REVISION = '293496'
 
 OUT_DIR = os.path.join(SRC_DIR, 'out')
 CHROME_SYNC_DIR = os.path.join(OUT_DIR, 'downloaded_chrome')
 
 GS_URL = 'http://storage.googleapis.com'
-CHROME_URL_FORMAT = GS_URL + '/chromium-browser-continuous/%s/%d/%s'
+CHROME_URL_FORMAT = GS_URL + '/chromium-browser-continuous/%s/%s/%s'
 
 TESTING_LIB = os.path.join(SCRIPT_DIR, 'chrome_test.js')
 TESTING_EXTENSION = os.path.join(SCRIPT_DIR, 'extension')
+TESTING_TCP_APP = os.path.join(SCRIPT_DIR, 'tcpapp');
 
 RETURNCODE_KILL = -9
 
@@ -53,7 +55,7 @@ def ChromeUrl(arch):
   """Get the URL to download chrome from.
 
   Args:
-    arch: Chrome architecture to select i686/x86_64.
+    arch: Chrome architecture to select i686/x86_64/pnacl.
   Returns:
     URL to download a zip file from.
   """
@@ -67,7 +69,8 @@ def ChromeUrl(arch):
     filename = 'chrome-linux.zip'
     if arch == 'i686':
       target = 'Linux'
-    elif arch == 'x86_64':
+    elif arch == 'x86_64' or arch == 'pnacl':
+      # Arbitrarily decide we will use 64-bit Linux for PNaCl.
       target = 'Linux_x64'
     else:
       logging.error('Bad architecture %s' % arch)
@@ -399,7 +402,7 @@ def RunChrome(chrome_path, timeout, filter_string, roots, use_xvfb,
                for i in load_apps]
 
   # Add in the chrome_test extension and compute its id.
-  load_extensions += [TESTING_EXTENSION]
+  load_extensions += [TESTING_EXTENSION, TESTING_TCP_APP]
   testing_id = ChromeAppIdFromPath(TESTING_EXTENSION)
 
   s = ChromeTestServer(('', 0), ChromeTestHandler)
@@ -504,44 +507,53 @@ def Main(argv):
           See --help.
   NOTE: Ends the process with sys.exit(1) on failure.
   """
-  parser = optparse.OptionParser(usage='%prog [options] <test_path>',
-                                 description=__doc__)
-  parser.add_option(
-      '-x', '--xvfb', default=False, action='store_true',
+  parser = argparse.ArgumentParser(description=__doc__)
+  parser.add_argument(
+      'start_path', metavar='START_PATH',
+      help='location in which to run tests')
+  parser.add_argument(
+      '-x', '--xvfb', action='store_true',
       help='Run Chrome thru xvfb on Linux.')
-  parser.add_option(
+  parser.add_argument(
       '-a', '--arch', default='i686',
       help='Chrome architecture: i686 / x86_64.')
-  parser.add_option(
+  parser.add_argument(
       '-v', '--verbose', default=0, action='count',
       help='Emit verbose output, use twice for more.')
-  parser.add_option(
-      '-t', '--timeout', default=30, type='float',
+  parser.add_argument(
+      '-t', '--timeout', default=30, type=float,
       help='Timeout for all tests (in seconds).')
-  parser.add_option(
+  parser.add_argument(
       '-C', '--chdir', default=[], action='append',
       help='Add a root directory.')
-  parser.add_option(
+  parser.add_argument(
       '--load-extension', default=[], action='append',
       help='Add an extension to load on start.')
-  parser.add_option(
+  parser.add_argument(
       '--load-and-launch-app', default=[], action='append',
       help='Add an app to load on start.')
-  parser.add_option(
+  parser.add_argument(
       '--enable-nacl', default=False, action='store_true',
       help='Enable NaCl generally.')
-  parser.add_option(
+  parser.add_argument(
       '--enable-nacl-debug', default=False, action='store_true',
       help='Enable NaCl debugging.')
-  parser.add_option(
+  parser.add_argument(
       '-f', '--filter', default='*',
       help='Filter on tests.')
-  options, args = parser.parse_args(argv)
-  if len(args) == 1:
-    start_path = args[0]
-  else:
-    parser.print_help()
-    sys.exit(1)
+  parser.add_argument(
+      '-p', '--param', default=[], action='append',
+      help='Add a parameter to the end of the url, = separated.')
+  options = parser.parse_args(argv)
+
+  if options.param:
+    params = {}
+    params['SYS_ARCH'] = options.arch
+    for param in options.param:
+      key, value = param.split('=', 1)
+      params[key] = value
+    options.start_path += '?' + urllib.urlencode(params)
+
   if options.verbose > 1:
     logging.getLogger().setLevel(logging.DEBUG)
   elif options.verbose > 0:
@@ -554,6 +566,24 @@ def Main(argv):
   if not options.chdir:
     options.chdir.append('.')
 
+  if sys.platform.startswith('linux'):
+    default_sandbox_locations = [
+      '/usr/local/sbin/chrome-devel-sandbox',
+      '/opt/chromium/chrome_sandbox'
+    ]
+    if 'CHROME_DEVEL_SANDBOX' not in os.environ:
+      for filename in default_sandbox_locations:
+        if os.path.exists(filename):
+          os.environ['CHROME_DEVEL_SANDBOX'] = filename
+          break
+      else:
+        logging.error('chrome_test on linux requires CHROME_DEVEL_SANDBOX')
+        sys.exit(1)
+    if not os.path.exists(os.environ['CHROME_DEVEL_SANDBOX']):
+      logging.error('chrome sandbox specified by CHROME_DEVEL_SANDBOX is '
+                    'missing: %s' % os.environ['CHROME_DEVEL_SANDBOX'])
+      sys.exit(1)
+
   DownloadChrome(ChromeUrl(options.arch), ChromeDir(options.arch))
   RunChrome(
       chrome_path=ChromeRunPath(options.arch),
@@ -565,5 +595,5 @@ def Main(argv):
       enable_nacl_debug=options.enable_nacl_debug,
       load_extensions=options.load_extension,
       load_apps=options.load_and_launch_app,
-      start_path=start_path)
+      start_path=options.start_path)
   sys.exit(0)

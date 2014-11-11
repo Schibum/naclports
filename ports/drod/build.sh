@@ -1,4 +1,3 @@
-#!/bin/bash
 # Copyright (c) 2013 The Native Client Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -16,7 +15,7 @@ BuildStep() {
   export CXXFLAGS="${NACLPORTS_CXXFLAGS} -Wno-write-strings"
   export LDFLAGS_common=${NACLPORTS_LDFLAGS}
   export EXTRA_LIBS="-lSDL_mixer -lSDL -lmikmod -lvorbisfile -lvorbisenc \
-                     -lvorbis -logg -lfreetype -lbz2 -lSDLmain -ltar \
+                     -lvorbis -logg -lfreetype -lpng -lbz2 -lSDLmain -ltar \
                      -lnacl_io"
   # So sdl-config can be found
   export PATH=${NACLPORTS_BIN}:${PATH}

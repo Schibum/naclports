@@ -7,13 +7,19 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <grp.h>
+#include <mntent.h>
+#include <net/if.h>
 #include <pwd.h>
+#include <spawn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <syslog.h>
+#include <sys/poll.h>
+#include <sys/resource.h>
 #include <sys/signal.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/uio.h>
@@ -39,9 +45,7 @@
           __FUNCTION__);                                                 \
   abort();
 
-#define UNIMPLEMENTED() \
-  fprintf(stderr, "Function %s is not implemented in glibc-compat!\n", \
-          __FUNCTION__);
+#define UNIMPLEMENTED()
 
 #define UNIMPLEMENTED_NOSYS_RTN(RTN) \
   UNIMPLEMENTED(); \
@@ -55,6 +59,11 @@
 #undef htons
 #undef ntohl
 #undef ntohs
+
+int poll(struct pollfd *fds, nfds_t nfds, int timeout) __attribute__((weak));
+int poll(struct pollfd *fds, nfds_t nfds, int timeout) {
+  UNIMPLEMENTED_NOSYS();
+}
 
 int accept(int sockfd, struct sockaddr *addr,
            socklen_t *addrlen) __attribute__((weak));
@@ -73,37 +82,6 @@ int eaccess(const char *pathname, int mode) {
   return access(pathname, mode);
 }
 
-#if NACL_SDK_VERSION < 34
-speed_t cfgetispeed(const struct termios *termios_p) __attribute__((weak));
-speed_t cfgetispeed(const struct termios *termios_p) {
-  return termios_p->c_ispeed;
-}
-
-speed_t cfgetospeed(const struct termios *termios_p) __attribute__((weak));
-speed_t cfgetospeed(const struct termios *termios_p) {
-  return termios_p->c_ospeed;
-}
-
-int cfsetispeed(struct termios *termios_p, speed_t speed) __attribute__((weak));
-int cfsetispeed(struct termios *termios_p, speed_t speed) {
-  termios_p->c_ispeed = speed;
-  return 0;
-}
-
-int cfsetospeed(struct termios *termios_p, speed_t speed) __attribute__((weak));
-int cfsetospeed(struct termios *termios_p, speed_t speed) {
-  termios_p->c_ospeed = speed;
-  return 0;
-}
-
-int cfsetspeed(struct termios *termios_p, speed_t speed) __attribute__((weak));
-int cfsetspeed(struct termios *termios_p, speed_t speed) {
-  termios_p->c_ispeed = speed;
-  termios_p->c_ospeed = speed;
-  return 0;
-}
-#endif
-
 void endgrent(void) __attribute__((weak));
 void endgrent(void) {
   UNIMPLEMENTED();
@@ -117,6 +95,13 @@ struct group *getgrent(void) {
 struct group *getgrnam(const char *name) __attribute__((weak));
 struct group *getgrnam(const char *name) {
   UNIMPLEMENTED_NOSYS_RTN(NULL);
+}
+
+int getgrgid_r(gid_t gid, struct group * grp, char * buf, size_t buflen,
+               struct group **result) __attribute__((weak));
+int getgrgid_r(gid_t gid, struct group * grp, char * buf, size_t buflen,
+               struct group **result) {
+  UNIMPLEMENTED_NOSYS();
 }
 
 struct group *getgrgid(gid_t gid) __attribute__((weak));
@@ -209,6 +194,11 @@ int minor(dev_t dev) {
   return dev & 0xff;
 }
 
+int msync(void *addr, size_t length, int flags) __attribute__((weak));
+int msync(void *addr, size_t length, int flags) {
+  UNIMPLEMENTED_NOSYS();
+}
+
 uint32_t ntohl(uint32_t netlong) __attribute__((weak));
 uint32_t ntohl(uint32_t netlong) {
   UNIMPLEMENTED_FATAL();
@@ -222,6 +212,12 @@ uint16_t ntohs(uint16_t netshort) {
 ssize_t recv(int sockfd, void *buf, size_t len,
              int flags) __attribute__((weak));
 ssize_t recv(int sockfd, void *buf, size_t len, int flags) {
+  UNIMPLEMENTED_FATAL();
+}
+
+ssize_t recvmsg(int sockfd, struct msghdr *msg,
+                int flags) __attribute__((weak));
+ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags) {
   UNIMPLEMENTED_FATAL();
 }
 
@@ -249,6 +245,12 @@ ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
   UNIMPLEMENTED_FATAL();
 }
 
+ssize_t sendmsg(int sockfd, const struct msghdr *msg,
+                int flags) __attribute__((weak));
+ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags) {
+  UNIMPLEMENTED_FATAL();
+}
+
 void setgrent(void) __attribute__((weak));
 void setgrent(void) {
   UNIMPLEMENTED();
@@ -272,9 +274,35 @@ int sigsuspend(const sigset_t *mask) {
 }
 
 int sigaction(int signum, const struct sigaction *act,
-                     struct sigaction *oldact) __attribute__((weak));
+              struct sigaction *oldact) __attribute__((weak));
 int sigaction(int signum, const struct sigaction *act,
-                     struct sigaction *oldact) {
+              struct sigaction *oldact) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int sigvec(int signum, struct sigvec *vec,
+           struct sigvec *ovec) __attribute__((weak));
+int sigvec(int signum, struct sigvec *vec, struct sigvec *ovec) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int sigmask(int signum) __attribute__((weak));
+int sigmask(int signum) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int sigblock(int mask) __attribute__((weak));
+int sigblock(int mask) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int sigsetmask(int mask) __attribute__((weak));
+int sigsetmask(int mask) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int siggetmask(void) __attribute__((weak));
+int siggetmask(void) {
   UNIMPLEMENTED_NOSYS();
 }
 
@@ -284,40 +312,6 @@ int socketpair(int domain, int type, int protocol,
                int sv[2]) {
   UNIMPLEMENTED_FATAL();
 }
-
-#if NACL_SDK_VERSION < 34
-int tcdrain(int fd) __attribute__((weak));
-int tcdrain(int fd) {
-  UNIMPLEMENTED_NOSYS();
-}
-
-int tcflow(int fd, int action) __attribute__((weak));
-int tcflow(int fd, int action) {
-  UNIMPLEMENTED_NOSYS();
-}
-
-int tcflush(int fd, int queue_selector) __attribute__((weak));
-int tcflush(int fd, int queue_selector) {
-  UNIMPLEMENTED_NOSYS();
-}
-
-int tcgetattr(int fd, struct termios *termios_p) __attribute__((weak));
-int tcgetattr(int fd, struct termios *termios_p) {
-  UNIMPLEMENTED_NOSYS();
-}
-
-int tcsendbreak(int fd, int duration) __attribute__((weak));
-int tcsendbreak(int fd, int duration) {
-  UNIMPLEMENTED_NOSYS();
-}
-
-int tcsetattr(int fd, int optional_actions,
-              const struct termios *termios_p) __attribute__((weak));
-int tcsetattr(int fd, int optional_actions,
-              const struct termios *termios_p) {
-  UNIMPLEMENTED_NOSYS();
-}
-#endif
 
 FILE *popen(const char *command, const char *type) __attribute__ ((weak));
 FILE *popen(const char *command, const char *type) {
@@ -403,11 +397,6 @@ int connect(int sockfd, const struct sockaddr *addr,
   UNIMPLEMENTED_FATAL();
 }
 
-char* realpath(const char* path, const char* resolved) __attribute__ ((weak));
-char* realpath(const char* path, const char* resolved) {
-  UNIMPLEMENTED_NOSYS_RTN(NULL);
-}
-
 int getaddrinfo(const char *, const char *, const struct addrinfo *,
                 struct addrinfo **) __attribute__ ((weak));
 int getaddrinfo(const char *node, const char *service,
@@ -421,7 +410,259 @@ void freeaddrinfo(struct addrinfo *res) {
   UNIMPLEMENTED();
 }
 
+int getnameinfo(const struct sockaddr *sa, socklen_t salen,
+                char *host, socklen_t hostlen,
+                char *serv, socklen_t servlen,
+                unsigned int flags) __attribute__ ((weak));
+int getnameinfo(const struct sockaddr *sa, socklen_t salen,
+                char *host, socklen_t hostlen,
+                char *serv, socklen_t servlen,
+                unsigned int flags) {
+  UNIMPLEMENTED_NOSYS();
+}
+
 char *gai_strerror(int) __attribute__ ((weak));
 char *gai_strerror(int errcode) {
   UNIMPLEMENTED_NOSYS_RTN(NULL);
+}
+
+int mknod(const char *pathname, mode_t mode, dev_t dev) __attribute__ ((weak));
+int mknod(const char *pathname, mode_t mode, dev_t dev) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int mkfifo(const char *pathname, mode_t mode) __attribute__ ((weak));
+int mkfifo(const char *pathname, mode_t mode) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int posix_spawn(pid_t *pid, const char *path,
+                const posix_spawn_file_actions_t *file_actions,
+                const posix_spawnattr_t *attrp,
+                char* const argv[], char* const envp[]) __attribute__ ((weak));
+int posix_spawn(pid_t *pid, const char *path,
+                const posix_spawn_file_actions_t *file_actions,
+                const posix_spawnattr_t *attrp,
+                char* const argv[], char* const envp[]) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int posix_spawnp(pid_t *pid, const char *path,
+                const posix_spawn_file_actions_t *file_actions,
+                const posix_spawnattr_t *attrp,
+                char* const argv[], char* const envp[]) __attribute__ ((weak));
+int posix_spawnp(pid_t *pid, const char *path,
+                const posix_spawn_file_actions_t *file_actions,
+                const posix_spawnattr_t *attrp,
+                char* const argv[], char* const envp[]) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int getdtablesize (void) __attribute__ ((weak));
+int getdtablesize (void) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+FILE *setmntent(const char *filename, const char *type) __attribute__ ((weak));
+FILE *setmntent(const char *filename, const char *type) {
+  UNIMPLEMENTED_NOSYS_RTN(NULL);
+}
+
+struct mntent *getmntent(FILE *fp) __attribute__ ((weak));
+struct mntent *getmntent(FILE *fp) {
+  UNIMPLEMENTED_NOSYS_RTN(NULL);
+}
+
+int addmntent(FILE *fp, const struct mntent *mnt) __attribute__ ((weak));
+int addmntent(FILE *fp, const struct mntent *mnt) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int endmntent(FILE *fp) __attribute__ ((weak));
+int endmntent(FILE *fp) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+char *hasmntopt(const struct mntent *mnt,
+                const char *opt) __attribute__ ((weak));
+char *hasmntopt(const struct mntent *mnt, const char *opt) {
+  UNIMPLEMENTED_NOSYS_RTN(NULL);
+}
+
+int statvfs(const char *path, struct statvfs *buf) __attribute__ ((weak));
+int statvfs(const char *path, struct statvfs *buf) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int fstatvfs(int fd, struct statvfs *buf) __attribute__ ((weak));
+int fstatvfs(int fd, struct statvfs *buf) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int posix_spawn_file_actions_init(
+    posix_spawn_file_actions_t* file_actions) __attribute__ ((weak));
+int posix_spawn_file_actions_init(
+    posix_spawn_file_actions_t* file_actions) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int posix_spawn_file_actions_destroy(
+    posix_spawn_file_actions_t* file_actions) __attribute__ ((weak));
+int posix_spawn_file_actions_destroy(
+    posix_spawn_file_actions_t* file_actions) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int posix_spawn_file_actions_addopen(
+    posix_spawn_file_actions_t* file_actions, int fildes,
+    const char* path, int oflag, mode_t mode) __attribute__ ((weak));
+int posix_spawn_file_actions_addopen(
+    posix_spawn_file_actions_t* file_actions, int fildes,
+    const char* path, int oflag, mode_t mode) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int posix_spawn_file_actions_adddup2(
+    posix_spawn_file_actions_t *file_actions,
+    int fildes, int newfildes) __attribute__ ((weak));
+int posix_spawn_file_actions_adddup2(
+    posix_spawn_file_actions_t *file_actions,
+    int fildes, int newfildes) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int posix_spawn_file_actions_addclose(
+    posix_spawn_file_actions_t *file_actions,
+    int fildes) __attribute__ ((weak));
+int posix_spawn_file_actions_addclose(
+    posix_spawn_file_actions_t *file_actions, int fildes) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+
+int posix_spawnattr_init(posix_spawnattr_t* attr) __attribute__ ((weak));
+int posix_spawnattr_init(posix_spawnattr_t* attr) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int posix_spawnattr_destroy(posix_spawnattr_t* attr) __attribute__ ((weak));
+int posix_spawnattr_destroy(posix_spawnattr_t* attr) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int posix_spawnattr_getflags(
+    const posix_spawnattr_t* attr, short* flags) __attribute__ ((weak));
+int posix_spawnattr_getflags(
+    const posix_spawnattr_t* attr, short* flags) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int posix_spawnattr_getpgroup(
+    const posix_spawnattr_t* attr, pid_t* pgroup) __attribute__ ((weak));
+int posix_spawnattr_getpgroup(
+    const posix_spawnattr_t* attr, pid_t* pgroup) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int posix_spawnattr_getschedparam(
+    const posix_spawnattr_t* attr,
+    struct sched_param* schedparam) __attribute__ ((weak));
+int posix_spawnattr_getschedparam(
+    const posix_spawnattr_t* attr, struct sched_param* schedparam) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int posix_spawnattr_getschedpolicy(
+    const posix_spawnattr_t* attr, int* schedpolicy) __attribute__ ((weak));
+int posix_spawnattr_getschedpolicy(
+    const posix_spawnattr_t* attr, int* schedpolicy) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int posix_spawnattr_getsigdefault(
+    const posix_spawnattr_t* attr, sigset_t* sigdefault) __attribute__ ((weak));
+int posix_spawnattr_getsigdefault(
+    const posix_spawnattr_t* attr, sigset_t* sigdefault) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int posix_spawnattr_getsigmask(
+    const posix_spawnattr_t* attr, sigset_t* sigmask) __attribute__ ((weak));
+int posix_spawnattr_getsigmask(
+    const posix_spawnattr_t* attr, sigset_t* sigmask) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int posix_spawnattr_setflags(posix_spawnattr_t* attr,
+                             short flags) __attribute__ ((weak));
+int posix_spawnattr_setflags(posix_spawnattr_t* attr, short flags) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int posix_spawnattr_setpgroup(posix_spawnattr_t* attr,
+                              pid_t pgroup) __attribute__ ((weak));
+int posix_spawnattr_setpgroup(posix_spawnattr_t* attr, pid_t pgroup) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int posix_spawnattr_setschedparam(
+    posix_spawnattr_t* attr,
+    const struct sched_param* schedparam) __attribute__ ((weak));
+int posix_spawnattr_setschedparam(
+    posix_spawnattr_t* attr, const struct sched_param* schedparam) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int posix_spawnattr_setschedpolicy(posix_spawnattr_t* attr,
+    int policy) __attribute__ ((weak));
+int posix_spawnattr_setschedpolicy(posix_spawnattr_t* attr, int policy) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int posix_spawnattr_setsigdefault(
+    posix_spawnattr_t* attr, const sigset_t* sigdefault) __attribute__ ((weak));
+int posix_spawnattr_setsigdefault(
+    posix_spawnattr_t* attr, const sigset_t* sigdefault) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int posix_spawnattr_setsigmask(
+    posix_spawnattr_t* attr, const sigset_t* sigmask) __attribute__ ((weak));
+int posix_spawnattr_setsigmask(
+    posix_spawnattr_t* attr, const sigset_t* sigmask) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+u_int if_nametoindex(const char* ifname) __attribute__ ((weak));
+u_int if_nametoindex(const char* ifname) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+char *if_indextoname(unsigned ifindex, char* ifname) __attribute__ ((weak));
+char *if_indextoname(unsigned ifindex, char* ifname) {
+  UNIMPLEMENTED_NOSYS_RTN(NULL);
+}
+
+struct if_nameindex *if_nameindex(void) __attribute__ ((weak));
+struct if_nameindex *if_nameindex(void) {
+  UNIMPLEMENTED_NOSYS_RTN(NULL);
+}
+
+void if_freenameindex(struct if_nameindex* ptr) __attribute__ ((weak));
+void if_freenameindex(struct if_nameindex* ptr) {
+}
+
+int getrlimit(int resource, struct rlimit *rlim) __attribute__ ((weak));
+int getrlimit(int resource, struct rlimit *rlim) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int setrlimit(int resource, const struct rlimit *rlim) __attribute__ ((weak));
+int setrlimit(int resource, const struct rlimit *rlim) {
+  UNIMPLEMENTED_NOSYS();
+}
+
+int pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset) {
+  UNIMPLEMENTED();
+  return ENOSYS;
 }

@@ -2,6 +2,7 @@
 # Copyright (c) 2013 The Native Client Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
+
 """Creates simple terminal for a NaCl module.
 
 This script is designed to make the process of porting terminal based
@@ -9,8 +10,10 @@ Native Client executables simple by generating boilerplate .html and .js
 files for a given Native Client module (.nmf).
 """
 
+from __future__ import print_function
+
+import argparse
 import logging
-import optparse
 import os
 import sys
 
@@ -22,8 +25,11 @@ HTML_TEMPLATE = '''\
     <META HTTP-EQUIV="Pragma" CONTENT="no-cache" />
     <META HTTP-EQUIV="Expires" CONTENT="-1" />
     <script type="text/javascript" src="hterm.concat.js"></script>
+    <script type="text/javascript" src="pipeserver.js"></script>
+    <script type="text/javascript" src="naclprocess.js"></script>
     <script type="text/javascript" src="naclterm.js"></script>
     <script type="text/javascript" src="%(module_name)s.js"></script>
+    %(include)s
 
     <style type="text/css">
       body {
@@ -50,7 +56,6 @@ HTML_TEMPLATE = '''\
 '''
 
 JS_TEMPLATE = '''\
-NaClTerm.prefix = '%(module_name)s'
 NaClTerm.nmf = '%(nmf)s'
 '''
 
@@ -58,10 +63,12 @@ FORMAT = '%(filename)s: %(message)s'
 logging.basicConfig(format=FORMAT)
 
 
-def CreateTerm(filename, name=None):
+def CreateTerm(filename, name=None, include=None):
   if not name:
     basename = os.path.basename(filename)
     name, _ = os.path.splitext(basename)
+
+  include = include or []
 
   htmlfile = name + '.html'
   logging.info('creating html: %s', htmlfile)
@@ -69,6 +76,10 @@ def CreateTerm(filename, name=None):
     args = {}
     args['title'] = name
     args['module_name'] = name
+
+    includeHTML = ['<script src="%s"></script>' % js for js in include]
+    args['include'] = '\n    '.join(includeHTML)
+
     outfile.write(HTML_TEMPLATE % args)
 
   jsfile = name + '.js'
@@ -80,28 +91,22 @@ def CreateTerm(filename, name=None):
     outfile.write(JS_TEMPLATE % args)
 
 
-def main():
-  parser = optparse.OptionParser(
-      usage='usage: %prog [-n] [-v] .nmf',
-      description=__doc__)
-  parser.add_option('-n', '--name',
-                    help='name of the application')
-  parser.add_option('-v', '--verbose',
-                    action='store_true', dest='verbose', default=False,
-                    help='be more verbose')
+def main(args):
+  parser = argparse.ArgumentParser(description=__doc__)
+  parser.add_argument('nmf', help='nmf file to load')
+  parser.add_argument('-n', '--name', help='name of the application')
+  parser.add_argument('-v', '--verbose', action='store_true',
+                      help='be more verbose')
+  parser.add_argument('-i', '--include', action='append', default=[],
+                      help='include a JavaScript file in the generated HTML')
 
-  options, args = parser.parse_args()
-
-  if not args:
-    parser.error('no input file specified')
-  if len(args) > 1:
-    parser.error('more than one input file specified')
-
+  options = parser.parse_args(args)
   if not options.verbose:
     logging.disable(logging.INFO)
 
-  CreateTerm(args[0], options.name)
+  CreateTerm(options.nmf, options.name, options.include)
+  return 0
 
 
 if __name__ == '__main__':
-  main()
+  sys.exit(main(sys.argv[1:]))

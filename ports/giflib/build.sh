@@ -1,14 +1,9 @@
-#!/bin/bash
 # Copyright (c) 2013 The Native Client Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-
-if [ "${NACL_SHARED}" = "1" ]; then
-  EXECUTABLES=util/.libs/rgb2gif${NACL_EXEEXT}
-else
-  EXECUTABLES=util/rgb2gif${NACL_EXEEXT}
-fi
+EXTRA_CONFIGURE_ARGS="--enable-x11=no"
+EXECUTABLES="util/rgb2gif${NACL_EXEEXT}"
 
 RunTest() {
   util/rgb2gif -s 320 200  < ${SRC_DIR}/tests/porsche.rgb > porsche.gif

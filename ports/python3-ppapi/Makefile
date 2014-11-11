@@ -3,11 +3,11 @@
 # found in the LICENSE file.
 
 VALID_TOOLCHAINS := glibc newlib pnacl
-NACL_SDK_ROOT ?= $(abspath $(CURDIR)/../..)
 include $(NACL_SDK_ROOT)/tools/common.mk
 
 TARGET = python
-LIBS = python3.4m readline ncurses tar ppapi_simple nacl_io ppapi_cpp ppapi
+LIBS = python3.4m readline ncurses bz2 z tar
+LIBS += ppapi_simple nacl_io ppapi_cpp ppapi
 NACL_LDFLAGS += $(NACL_CLI_MAIN_LIB)
 PNACL_LDFLAGS += $(NACL_CLI_MAIN_LIB)
 ifeq ($(TOOLCHAIN),glibc)
@@ -19,6 +19,11 @@ endif
 SOURCES = python.c
 INC_PATHS = $(NACLPORTS_INCLUDE)/python3.4m
 INSTALL_DIR = $(NACL_PACKAGES_PUBLISH)/python3/$(TOOLCHAIN)
+ifeq ($(TOOLCHAIN),pnacl)
+INSTALL_ARCH_DIR = $(INSTALL_DIR)
+else
+INSTALL_ARCH_DIR = $(INSTALL_DIR)/_platform_specific/$(NACL_ARCH)
+endif
 
 ifeq ($(TOOLCHAIN),pnacl)
 EXEEXT=.pexe
@@ -54,27 +59,46 @@ endif
 
 CHROMEAPPS = $(NACL_SRC)/third_party/libapps/
 LIB_DOT = $(CHROMEAPPS)/libdot
-NASSH = $(CHROMEAPPS)/nassh
+HTERM = $(CHROMEAPPS)/hterm
 
-install:
+install-hterm:
 	mkdir -p $(INSTALL_DIR)
-	tar -h -c --exclude=*.pyc --exclude=__pycache__ -C ${NACLPORTS_PREFIX} -f $(INSTALL_DIR)/pydata_$(NACL_ARCH).tar lib/python3.4 ${EXTRA_ASSETS}
-	LIBDOT_SEARCH_PATH=$(CHROMEAPPS) $(LIB_DOT)/bin/concat.sh -i $(NASSH)/concat/nassh_deps.concat -o $(INSTALL_DIR)/hterm.concat.js
-	cp $(OUTDIR)/python*$(EXEEXT) $(INSTALL_DIR)
-	rm -f $(INSTALL_DIR)/*_unstripped_*$(EXEEXT)
-	cp $(OUTDIR)/python.nmf $(INSTALL_DIR)
+	mkdir -p $(INSTALL_ARCH_DIR)
+	LIBDOT_SEARCH_PATH=$(CHROMEAPPS) $(LIB_DOT)/bin/concat.sh -i $(HTERM)/concat/hterm_deps.concat -o $(INSTALL_DIR)/hterm.concat.js
+	LIBDOT_SEARCH_PATH=$(CHROMEAPPS) $(LIB_DOT)/bin/concat.sh -i $(HTERM)/concat/hterm.concat -o $(INSTALL_DIR)/hterm2.concat.js
+	chmod +w $(INSTALL_DIR)/hterm2.concat.js $(INSTALL_DIR)/hterm.concat.js
+	cat $(INSTALL_DIR)/hterm2.concat.js >> $(INSTALL_DIR)/hterm.concat.js
+	rm $(INSTALL_DIR)/hterm2.concat.js
+	cp ../../build_tools/naclterm.js $(INSTALL_DIR)
+	cp ../../build_tools/pipeserver.js $(INSTALL_DIR)
+	cp ../../build_tools/naclprocess.js $(INSTALL_DIR)
+ifeq ($(TOOLCHAIN),pnacl)
+	sed -i.bak 's/x-nacl/x-pnacl/g' $(INSTALL_DIR)/naclprocess.js
+endif
+
+install: install-hterm
+	mkdir -p $(INSTALL_DIR)
+	tar -h -c --exclude=*.pyc --exclude=__pycache__ -C ${NACL_PREFIX} -f $(INSTALL_DIR)/pydata_$(NACL_ARCH).tar lib/python3.4 ${EXTRA_ASSETS}
+ifeq ($(TOOLCHAIN),pnacl)
+	cp $(OUTDIR)/python$(EXEEXT) $(INSTALL_ARCH_DIR)
+	cd $(INSTALL_DIR) && \
+	  python $(NACL_SDK_ROOT)/tools/create_nmf.py \
+	  python$(EXEEXT) -s . -o python.nmf
+else
+	cp $(OUTDIR)/python_$(NACL_ARCH)$(EXEEXT) $(INSTALL_ARCH_DIR)
+	cd $(INSTALL_DIR) && \
+	  python $(NACL_SDK_ROOT)/tools/create_nmf.py \
+	  _platform_specific/*/python_*$(EXEEXT) \
+	  -L $(OUTDIR)/lib32 -L $(OUTDIR)/lib64 \
+	  -s . -o python.nmf
+endif
 	cp index.html $(INSTALL_DIR)
 	cp python.js $(INSTALL_DIR)
-	cp ../../build_tools/naclterm.js $(INSTALL_DIR)
 	cp manifest.json ${INSTALL_DIR}
 	cp background.js ${INSTALL_DIR}
 	cp icon_16.png ${INSTALL_DIR}
 	cp icon_48.png ${INSTALL_DIR}
 	cp icon_128.png ${INSTALL_DIR}
-ifeq ($(TOOLCHAIN),pnacl)
-	sed -i.bak 's/x-nacl/x-pnacl/g' $(INSTALL_DIR)/naclterm.js
-endif
-ifeq ($(TOOLCHAIN),glibc)
-	cp -r $(OUTDIR)/lib* $(INSTALL_DIR)
-endif
 	cd $(INSTALL_DIR) && rm -f python.zip && zip -r python.zip .
+
+.PHONY: install-hterm

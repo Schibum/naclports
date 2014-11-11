@@ -1,4 +1,3 @@
-#!/bin/bash
 # Copyright (c) 2011 The Native Client Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -23,6 +22,21 @@ ConfigureStep() {
     ${extra}
 }
 
+TestStep() {
+  if [ ${NACL_ARCH} = "pnacl" ]; then
+    for arch in x86-32 x86-64; do
+      for exe in ${EXECUTABLES}; do
+        local exe_noext=${exe%.*}
+        WriteSelLdrScriptForPNaCl ${exe_noext} \
+            $(basename ${exe_noext}.${arch}.nexe) ${arch}
+      done
+      make check
+    done
+  else
+    make check
+  fi
+}
+
 PackageInstall() {
   RunPreInstallStep
   RunDownloadStep
@@ -30,19 +44,21 @@ PackageInstall() {
   RunPatchStep
 
   # Build fftw (double)
-  EXECUTABLES=tools/fftw-wisdom${NACL_EXEEXT}
+  EXECUTABLES="tools/fftw-wisdom${NACL_EXEEXT} tests/bench${NACL_EXEEXT}"
   RunConfigureStep
   RunBuildStep
   RunPostBuildStep
+  RunTestStep
   RunInstallStep
 
   # build fftwf (float)
-  EXECUTABLES=tools/fftwf-wisdom${NACL_EXEEXT}
+  EXECUTABLES="tools/fftwf-wisdom${NACL_EXEEXT} tests/bench${NACL_EXEEXT}"
   EXTRA_CONFIGURE_ARGS=--enable-float
   BUILD_DIR+="-float"
   RunConfigureStep
   RunBuildStep
   RunPostBuildStep
+  RunTestStep
   RunInstallStep
 
   PackageStep

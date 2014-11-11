@@ -49,8 +49,10 @@ Example use:
     $ ./partition.py -t <index> -n <number_of_shards>
 """
 
+from __future__ import print_function
+
+import argparse
 import json
-import optparse
 import os
 import subprocess
 import sys
@@ -58,30 +60,31 @@ import urllib2
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(SCRIPT_DIR)
-ARCHES = ('arm', 'i686', 'x86_64')
+TOOLCHAINS = ('bionic', 'newlib', 'glibc', 'pnacl')
 
-verbose = False
+sys.path.append(os.path.join(ROOT_DIR, 'lib'))
 
 import naclports
+import naclports.source_package
+from naclports import Trace
 
 
-class Error(Exception):
+class Error(naclports.Error):
   pass
-
-
-def Trace(msg):
-  if verbose:
-    sys.stderr.write(msg + '\n')
 
 
 def GetBuildOrder(projects):
   rtn = []
-  packages = [naclports.Package(os.path.join('ports', p)) for p in projects]
+  packages = [naclports.source_package.CreatePackage(p) for p in projects]
   for package in packages:
     for dep in package.DEPENDS:
-      rtn += GetBuildOrder([dep])
-    rtn.append(package.NAME)
+      for ordered_dep in GetBuildOrder([dep]):
+        if ordered_dep not in rtn:
+          rtn.append(ordered_dep)
+    if package.NAME not in rtn:
+      rtn.append(package.NAME)
   return rtn
+
 
 def GetDependencies(projects):
   deps = GetBuildOrder(projects)
@@ -115,14 +118,8 @@ class Project(object):
   def __init__(self, name):
     self.name = name
     self.time = 0
-    self.arch_times = [0] * len(ARCHES)
     self.dep_names = GetDependencies([name])
     self.dep_times = [0] * len(self.dep_names)
-
-  def UpdateArchTime(self, arch, time):
-    index = ARCHES.index(arch)
-    self.arch_times[index] = max(self.arch_times[index], time)
-    self.time = sum(self.arch_times)
 
   def UpdateDepTimes(self, project_map):
     for i, dep_name in enumerate(self.dep_names):
@@ -155,12 +152,11 @@ class Projects(object):
     for step in data['steps']:
       text = step['text'][0]
       text_tuple = text.split()
-      if len(text_tuple) != 3 or text_tuple[0] not in ARCHES:
+      if len(text_tuple) != 2 or text_tuple[0] not in TOOLCHAINS:
         continue
-      arch, _, name = text_tuple
+      _, name = text_tuple
       project = self.AddProject(name)
-      time = step['times'][1] - step['times'][0]
-      project.UpdateArchTime(arch, time)
+      project.time = step['times'][1] - step['times'][0]
 
   def PostProcessDeps(self):
     for project in self.projects:
@@ -263,7 +259,7 @@ def LoadCanned(parts):
 
 
 def FixupCanned(partitions):
-  all_projects = [p for p in naclports.PackageIterator()]
+  all_projects = [p for p in naclports.source_package.SourcePackageIterator()]
   all_names = [p.NAME for p in all_projects if not p.DISABLED]
 
   # Blank the last partition and fill it with anything not in the first two.
@@ -284,7 +280,7 @@ def FixupCanned(partitions):
   for i, partition in enumerate(partitions):
     for item in partition:
       if item not in all_names:
-        raise Error('non-existent package in partion %d: %s' % (i, item))
+        raise Error('non-existent package in partition %d: %s' % (i, item))
 
   # Check that partitions include all of their dependencies.
   for i, partition in enumerate(partitions):
@@ -297,36 +293,49 @@ def FixupCanned(partitions):
 
 
 def PrintCanned(index, parts):
+  canned = GetCanned(index, parts)
+  print(' '.join(canned))
+
+
+def GetCanned(index, parts):
   assert index >= 0 and index < parts, [index, parts]
   partitions = LoadCanned(parts)
   partitions = FixupCanned(partitions)
   Trace("Found %d packages for shard %d" % (len(partitions[index]), index))
-  print ' '.join(partitions[index])
+  return partitions[index]
 
 
 def main(args):
-  parser = optparse.OptionParser()
-  parser.add_option('-v', '--verbose', action='store_true',
-                    help='Output extra information.')
-  parser.add_option('-t', '--print-canned', type='int',
-                    help='Print a the canned partition list and exit.')
-  parser.add_option('-b', '--bot-prefix', help='builder name prefix.',
-                    default='linux-newlib-')
-  parser.add_option('-n', '--num-bots',
-                    help='Number of builders on the waterfall to collect '
-                    'data from or to print a canned partition for.',
-                    type='int', default=3)
-  parser.add_option('-p', '--num-parts',
-                    help='Number of parts to partition things into '
-                    '(this will differ from --num-bots when changing the '
-                    'number of shards).',
-                    type='int', default=3)
-  parser.add_option('--build-number', help='Builder number to look at for '
-                    'historical data on build times.', type='int', default=-1)
-  options, _ = parser.parse_args(args)
+  parser = argparse.ArgumentParser()
+  parser.add_argument('--check', action='store_true',
+                      help='check canned partition information is up-to-date.')
+  parser.add_argument('-v', '--verbose', action='store_true',
+                      help='Output extra information.')
+  parser.add_argument('-t', '--print-canned', type=int,
+                      help='Print a the canned partition list and exit.')
+  parser.add_argument('-b', '--bot-prefix', help='builder name prefix.',
+                      default='linux-newlib-')
+  parser.add_argument('-n', '--num-bots',
+                      help='Number of builders on the waterfall to collect '
+                      'data from or to print a canned partition for.',
+                      type=int, default=3)
+  parser.add_argument('-p', '--num-parts',
+                      help='Number of parts to partition things into '
+                      '(this will differ from --num-bots when changing the '
+                      'number of shards).',
+                      type=int, default=3)
+  parser.add_argument('--build-number', help='Builder number to look at for '
+                      'historical data on build times.', type=int, default=-1)
+  options = parser.parse_args(args)
+  naclports.verbose = options.verbose
 
-  global verbose
-  verbose = options.verbose
+  if options.check:
+    for num_bots in xrange(1, 6):
+      print('Checking partioning with %d bot(s)' % (num_bots))
+      # GetCanned with raise an Error if the canned partition information is
+      # bad, which in turn will trigger a non-zero return from this script.
+      GetCanned(0, num_bots)
+    return
 
   if options.print_canned is not None:
     PrintCanned(options.print_canned, options.num_bots)
@@ -341,20 +350,20 @@ def main(args):
 
   parts = Partition(projects, options.num_parts)
   for i, project_times in enumerate(parts):
-    print 'builder %d (total: %d)' % (i, project_times.total_time)
+    print('builder %d (total: %d)' % (i, project_times.total_time))
     project_names = project_times.TopologicallySortedProjectNames(projects)
-    print '  %s' % '\n  '.join(project_names)
+    print('  %s' % '\n  '.join(project_names))
 
   times = list(sorted(part.total_time for part in parts))
   difference = 0
   for i in range(1, len(times)):
     difference += times[i] - times[i - 1]
-  print 'Difference between total time of builders: %d' % difference
+  print('Difference between total time of builders: %d' % difference)
 
 
 if __name__ == '__main__':
   try:
     sys.exit(main(sys.argv[1:]))
-  except Error, e:
+  except Error as e:
     sys.stderr.write("%s\n" % e)
     sys.exit(1)

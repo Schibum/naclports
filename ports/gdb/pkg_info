@@ -1,6 +1,8 @@
 NAME=gdb
-VERSION=6.8
-URL=http://git.chromium.org/native_client/nacl-gdb.git@ef0bd30c46a9066309396c37b10a8ff9a726faf3
+VERSION=7.7
+URL=https://chromium.googlesource.com/native_client/nacl-binutils.git@41afdf9d5
 LICENSE=CUSTOM
-LIBC=glibc
-DEPENDS=(ncurses expat readline)
+DISABLED_ARCH=(pnacl)
+BUILD_OS=linux
+DISABLED_LIBC=(bionic)
+DEPENDS=(ncurses expat readline zlib glibc-compat nacl-spawn)

@@ -1,13 +1,14 @@
-#!/bin/bash
 # Copyright (c) 2012 The Native Client Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+MIRROR_URL=http://storage.googleapis.com/naclports/mirror
+
 # Beneath a Steel Sky (floppy version)
-readonly BASS_FLOPPY_URL=http://storage.googleapis.com/nativeclient-mirror/nacl/scummvm_games/bass/BASS-Floppy-1.3.zip
+readonly BASS_FLOPPY_URL=${MIRROR_URL}/scummvm_games/bass/BASS-Floppy-1.3.zip
 readonly BASS_FLOPPY_NAME=BASS-Floppy-1.3
 
-readonly LURE_URL=http://storage.googleapis.com/nativeclient-mirror/nacl/scummvm_games/lure/lure-1.1.zip
+readonly LURE_URL=${MIRROR_URL}/scummvm_games/lure/lure-1.1.zip
 readonly LURE_NAME=lure-1.1
 
 EXECUTABLES=scummvm
@@ -58,7 +59,7 @@ InstallStep() {
      dists/pred.dic \
      ${SCUMMVM_DIR}
 
-  cp `find gui/themes/fonts/ -type f` ${SCUMMVM_DIR}
+  cp $(find gui/themes/fonts/ -type f) ${SCUMMVM_DIR}
 
   Banner "Creating tarballs"
   cd runimage
@@ -120,7 +121,7 @@ CustomCheck() {
 }
 
 DownloadZipStep() {
-  cd ${NACL_PACKAGES_TARBALLS}
+  cd ${NACL_PACKAGES_CACHE}
   # if matching zip already exists, don't download again
   if ! CustomCheck $3; then
     Fetch $1 $2.zip
@@ -135,7 +136,7 @@ ExtractGameZipStep() {
   Banner "Unzipping ${PACKAGE_NAME}.zip"
   ChangeDir ${WORK_DIR}
   Remove ${1}
-  unzip -d ${1} ${NACL_PACKAGES_TARBALLS}/${PACKAGE_NAME}.zip
+  unzip -d ${1} ${NACL_PACKAGES_CACHE}/${PACKAGE_NAME}.zip
 }
 
 GameGetStep() {

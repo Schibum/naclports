@@ -1,4 +1,3 @@
-#!/bin/bash
 # Copyright (c) 2014 The Native Client Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -25,12 +24,14 @@ ConfigureStep() {
   EXTRA_CONFIGURE_ARGS+=" --with-suffix=${NACL_EXEEXT}"
   EXTRA_CONFIGURE_ARGS+=" --build=i686-linux-gnu --disable-shared --enable-static"
   export SO=.a
-  export MAKEFLAGS="PGEN=${NACL_HOST_PYROOT}/../python-host/build-nacl-host/Parser/pgen"
+  export MAKEFLAGS="PGEN=${NACL_HOST_PYBUILD}/Parser/pgen"
   export LIBS="-ltermcap"
   export DYNLOADFILE=dynload_ppapi.o
   export MACHDEP=ppapi
   export LINKCC=${NACLCXX}
-  LIBS+=" -lglibc-compat -lc"
+  if [ "${NACL_LIBC}" = "newlib" ]; then
+    LIBS+=" -lglibc-compat -lc"
+  fi
   LogExecute cp ${START_DIR}/dynload_ppapi.c ${SRC_DIR}/Python/
   # This next step is costly, but it sets the environment variables correctly.
   DefaultConfigureStep
@@ -44,9 +45,16 @@ ConfigureStep() {
     fi
   done
   LogExecute rm -vf libpython2.7.a
-  PY_LINK_LINE+="ppapi_simple ${DEST_PYTHON_OBJS}/\*.o"
-  PY_LINK_LINE+=" ${PY_MOD_LIBS} -lz -lppapi -lppapi_cpp -lnacl"
-  PY_LINK_LINE+=" -lnacl_io -lc -lglibc-compat -lbz2"
+  PY_LINK_LINE+="ppapi_wrapper ${DEST_PYTHON_OBJS}/\*/\*.o"
+  # Not sure why -uPSUserMainGet is needed here.  NACL_CLI_MAIN_LIB already
+  # contains -uPSUserCreateInstance which should be enough to pull in both
+  # symbols (they live int he same object file in libcli_main.a).
+  PY_LINK_LINE+=" ${PY_MOD_LIBS} -Wl,-uPSUserMainGet ${NACL_CLI_MAIN_LIB}"
+  PY_LINK_LINE+=" -lz -lppapi_simple -lppapi -lppapi_cpp -lnacl"
+  PY_LINK_LINE+=" -lnacl_io -lc -lbz2"
+  if [ "${NACL_LIBC}" = "newlib" ]; then
+    PY_LINK_LINE+=" -lglibc-compat"
+  fi
   echo ${PY_LINK_LINE} >> Modules/Setup.local
   # At this point we use the existing environment variables from
   # DefaultConfigureStep to build our destination Python modules
@@ -55,19 +63,18 @@ ConfigureStep() {
 BuildStep() {
   SetupCrossEnvironment
   export CROSS_COMPILE=true
-  export MAKEFLAGS="PGEN=${NACL_HOST_PYROOT}/../python-host/build-nacl-host/Parser/pgen"
+  export MAKEFLAGS="PGEN=${NACL_HOST_PYBUILD}/Parser/pgen"
   DefaultBuildStep
   ChangeDir ${BUILD_DIR}
   Banner "Rebuilding libpython2.7.a"
-  ${AR} cr libpython2.7.a ${DEST_PYTHON_OBJS}/*.o
+  ${AR} cr libpython2.7.a ${DEST_PYTHON_OBJS}/*/*.o
   ${RANLIB} libpython2.7.a
   # To avoid rebuilding python.nexe with the new libpython2.7.a and duplicating
   # symbols
   LogExecute touch python${NACL_EXEEXT}
   # The modules get built with SO=so, but they need to be SO=a inside the
   # destination filesystem.
-  for fn in `find ${NACL_DEST_PYROOT}/${SITE_PACKAGES} -name "*.so"`
-  do
+  for fn in $(find ${NACL_DEST_PYROOT}/${SITE_PACKAGES} -name "*.so"); do
     LogExecute touch ${fn%%so}a
     LogExecute rm -v ${fn}
   done

@@ -1,11 +1,10 @@
-#!/bin/bash
 # Copyright (c) 2011 The Native Client Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+# Configure requires this variable to be pre-set when cross compiling.
+export bash_cv_wcwidth_broken=no
 
-# readline has config.sub in a 'support' subfolder
-CONFIG_SUB=support/config.sub
 MAKEFLAGS+=" EXEEXT=.${NACL_EXEEXT}"
 
 if [ "${NACL_LIBC}" = "newlib" ]; then
@@ -35,12 +34,10 @@ TestStep() {
   popd
 }
 
-
 InstallStep() {
   DefaultInstallStep
   if [ "${NACL_SHARED}" = "1" ]; then
     cd ${DESTDIR_LIB}
     ln -sf libreadline.so.6 libreadline.so
-    cd -
   fi
 }

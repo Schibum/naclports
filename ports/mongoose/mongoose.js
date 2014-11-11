@@ -6,7 +6,6 @@
 
 'use strict';
 
-NaClTerm.prefix = 'mongoose'
 NaClTerm.nmf = 'mongoose.nmf'
 
 lib.rtdep('lib.f')

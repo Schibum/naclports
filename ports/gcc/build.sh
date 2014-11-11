@@ -1,11 +1,10 @@
-#!/bin/bash
 # Copyright (c) 2014 The Native Client Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-export EXTRA_LIBS=\
-"-lppapi -lppapi_cpp -lppapi_simple -lcli_main -lnacl_io -lnacl_spawn"
-CONFIG_SUB=support/config.sub
+export EXTRA_LIBS="-lnacl_spawn ${NACL_CLI_MAIN_LIB} \
+  -lppapi_simple -lnacl_io -lppapi -lppapi_cpp -l${NACL_CPP_LIB}"
+
 # --with-build-sysroot is necessary to run "fixincl"
 # properly. Without this option, GCC's build system tries to create
 # "include-fixed" based on the host's include directory, which is
@@ -17,7 +16,9 @@ EXTRA_CONFIGURE_ARGS="\
 
 ConfigureStep() {
   DefaultConfigureStep
-  LogExecute rm -f `find -name config.cache`
+  for cache_file in $(find . -name config.cache); do
+    Remove $cache_file
+  done
 }
 
 InstallStep() {

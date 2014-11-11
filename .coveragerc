@@ -1,0 +1,6 @@
+[run]
+omit = third_party/mock/mock.py,*_test.py
+data_file = out/coverage
+
+[html]
+directory = out/coverage_html

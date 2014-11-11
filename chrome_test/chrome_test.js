@@ -147,17 +147,34 @@ chrometest.proxyExtension = function(extensionName) {
 };
 
 /**
+ * Get an URL that references the test harness.
+ * @param {string} path The relative path to a resource hosted by the harness.
+ * @return {string} The absolute URL.
+ */
+chrometest.harnessURL = function(path) {
+  var baseURL = location.href.split('/').slice(0, -1).join('/');
+  return baseURL + '/' + path;
+};
+
+/**
  * Log a message to the test harness.
  * @param {string} level The python logging level of the message.
  * @param {string} message The message to log.
  * @return {Promise} A promise to log it (or rejects with error code).
  */
 chrometest.log = function(level, message) {
+  // Cap the log line limit.
+  var logLimit = 1024;
+  var rest = message.substr(logLimit);
+  message = message.substr(0, logLimit);
   console.log(level + ': ' + message);
   return chrometest.httpGet(
-    '/_command?log=' + encodeURIComponent(message) +
-    '&level=' + encodeURIComponent(level)).then(function(result) {
-    // Consume the result so theres's no confusion with any chained promises.
+      '/_command?log=' + encodeURIComponent(message) +
+      '&level=' + encodeURIComponent(level)).then(function(result) {
+    if (rest.length > 0) {
+      // Log the rest if any.
+      chrometest.log(level, rest);
+    }
   });
 };
 
@@ -321,7 +338,7 @@ chrometest.fail = function() {
  * @param {?} error A thrown value.
  */
 chrometest.formatError = function(error) {
-  if (error.stack === undefined) {
+  if (error === undefined || error.stack === undefined) {
     return '' + error;
   } else {
     return error.stack;

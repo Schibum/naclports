@@ -4,5 +4,4 @@
  * found in the LICENSE file.
  */
 
-NaClTerm.prefix = 'python'
 NaClTerm.nmf = 'python.nmf'

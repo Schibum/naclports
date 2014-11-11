@@ -1,17 +1,16 @@
-#!/bin/bash
 # Copyright (c) 2013 The Native Client Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
 MAKE_TARGETS="pprogram"
-INSTALL_TARGETS="install-nodoc DESTDIR=${NACL_TOOLCHAIN_INSTALL}"
+INSTALL_TARGETS="install-nodoc"
 
 EXECUTABLES="ruby${NACL_EXEEXT} pepper-ruby${NACL_EXEEXT}"
 
 ConfigureStep() {
   # We need to build a host version of ruby for use during the nacl
   # build.
-  HOST_BUILD=${SRC_DIR}/build-nacl-host
+  HOST_BUILD=${WORK_DIR}/build_host
   if [ ! -x ${HOST_BUILD}/inst/bin/ruby ]; then
     Banner "Building ruby for host"
     MakeDir ${HOST_BUILD}
@@ -22,13 +21,12 @@ ConfigureStep() {
     cd -
   fi
 
-  SetupCrossEnvironment
-
   # TODO(sbc): remove once getaddrinfo() is working
-  local EXTRA_CONFIGURE_ARGS=--disable-ipv6
+  EXTRA_CONFIGURE_ARGS=--disable-ipv6
 
   if [ "${NACL_LIBC}" = "newlib" ]; then
     EXTRA_CONFIGURE_ARGS+=" --with-static-linked-ext --with-newlib"
+    NACLPORTS_CPPFLAGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat"
     export LIBS="-lglibc-compat"
   else
     EXTRA_CONFIGURE_ARGS+=" --with-out-ext=openssl,digest/*"
@@ -43,10 +41,11 @@ ConfigureStep() {
     conf_host="nacl"
   fi
 
+  SetupCrossEnvironment
   LogExecute ${SRC_DIR}/configure \
     --host=${conf_host} \
-    --prefix=${PREFIX} \
-    --with-baseruby=$SRC_DIR/build-nacl-host/inst/bin/ruby \
+    --prefix=/ \
+    --with-baseruby=${HOST_BUILD}/inst/bin/ruby \
     --with-http=no \
     --with-html=no \
     --with-ftp=no \
@@ -64,4 +63,9 @@ BuildStep() {
     # Just write the x86-64 version out for now.
     TranslateAndWriteSelLdrScript ruby.pexe x86-64 ruby.x86-64.nexe ruby
   fi
+}
+
+InstallStep() {
+  DESTDIR=${DESTDIR}/${PREFIX}
+  DefaultInstallStep
 }

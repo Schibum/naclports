@@ -2,20 +2,21 @@
 # Copyright (c) 2012 The Native Client Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-#
 
-"""Download all Native Client toolchains for this platform.
+"""Download Native Client SDK for the current platform.
 
-This module downloads toolchain bz2's and expands them. It requires
+This script downloads toolchain bz2's and expands them. It requires
 gsutil to be in the bin PATH and assumes if building on windows that
-cygwin is installed to \cygwin
+cygwin is installed to \cygwin.
 
-On windows this script also required access to the cygtar python
+On Windows this script also required access to the cygtar python
 module which gets included by the gclient DEPS.
 """
 
+from __future__ import print_function
+
+import argparse
 import glob
-import optparse
 import os
 import re
 import shutil
@@ -23,9 +24,10 @@ import stat
 import subprocess
 import sys
 import tarfile
-import tempfile
 import time
 import urllib
+
+HISTORY_SIZE = 500
 
 if sys.version_info < (2, 6, 0):
   sys.stderr.write('python 2.6 or later is required run this script\n')
@@ -96,23 +98,24 @@ def DetermineSDKURL(flavor, base_url, version):
     return [os.path.basename(os.path.normpath(e)) for e in elements]
 
   if version == 'latest':
-    print 'Looking for latest SDK upload...'
+    print('Looking for latest SDK upload...')
     # List the top level of the nacl_sdk folder
     versions = GSList('')
     # Find all trunk revision
     versions = [v for v in versions if v.startswith('trunk')]
 
     # Look backwards through all trunk revisions
-    # Only look back 100 revisions so this script doesn't take
+    # Only look back HISTORY_SIZE revisions so this script doesn't take
     # forever.
     versions = list(reversed(sorted(versions)))
-    for version_dir in versions[:100]:
+    for version_dir in versions[:HISTORY_SIZE]:
       contents = GSList(version_dir)
       if path in contents:
         version = version_dir.rsplit('.', 1)[1]
         break
     else:
-      ErrorOut('No SDK build (%s) found in last 100 trunk builds' % (path))
+      ErrorOut('No SDK build (%s) found in last %d trunk builds' % (
+          path, HISTORY_SIZE))
 
   version = int(version)
   return ('%strunk.%d/%s' % (GSTORE, version, path), version)
@@ -122,7 +125,7 @@ def Untar(bz2_filename):
   if sys.platform == 'win32':
     tar_file = None
     try:
-      print 'Unpacking tarball...'
+      print('Unpacking tarball...')
       tar_file = cygtar.CygTar(bz2_filename, 'r:bz2')
       tar_file.Extract()
     except Exception, err:
@@ -153,7 +156,7 @@ def DownloadAndInstallSDK(url):
   if sys.platform in ['win32', 'cygwin']:
     cygbin = os.path.join(FindCygwin(), 'bin')
 
-  print 'Downloading "%s" to "%s"...' % (url, bz2_filename)
+  print('Downloading "%s" to "%s"...' % (url, bz2_filename))
   sys.stdout.flush()
 
   # Download it.
@@ -177,7 +180,7 @@ def DownloadAndInstallSDK(url):
 
   # Drop old versions.
   if os.path.exists(TARGET_DIR):
-    print 'Cleaning up old SDK...'
+    print('Cleaning up old SDK...')
     if sys.platform in ['win32', 'cygwin']:
       cmd = [os.path.join(cygbin, 'bin', 'rm.exe'), '-rf']
     else:
@@ -186,7 +189,7 @@ def DownloadAndInstallSDK(url):
     returncode = subprocess.call(cmd)
     assert returncode == 0
 
-  print 'Renaming toolchain "%s" -> "%s"' % (actual_dir, TARGET_DIR)
+  print('Renaming toolchain "%s" -> "%s"' % (actual_dir, TARGET_DIR))
   os.rename(actual_dir, TARGET_DIR)
 
   if sys.platform in ['win32', 'cygwin']:
@@ -195,7 +198,7 @@ def DownloadAndInstallSDK(url):
   # Clean up: remove the sdk bz2.
   os.remove(bz2_filename)
 
-  print 'Install complete.'
+  print('Install complete.')
 
 
 PLATFORM_COLLAPSE = {
@@ -207,15 +210,17 @@ PLATFORM_COLLAPSE = {
 }
 
 def main(argv):
-  parser = optparse.OptionParser()
-  parser.add_option(
-      '-v', '--version', default='latest',
-      help='which version of the toolchain to download')
-  options, args = parser.parse_args(argv)
-  if args:
-    parser.error('invalid argument')
+  parser = argparse.ArgumentParser(description=__doc__)
+  parser.add_argument('-v', '--version', default='latest',
+      help='which version of the SDK to download')
+  parser.add_argument('--bionic', action='store_true',
+      help='download bionic version of the SDK (linux only).')
+  options = parser.parse_args(argv)
 
-  flavor = 'naclsdk_' + PLATFORM_COLLAPSE[sys.platform]
+  if options.bionic:
+    flavor = 'naclsdk_bionic'
+  else:
+    flavor = 'naclsdk_' + PLATFORM_COLLAPSE[sys.platform]
 
   os.environ['NACL_SDK_ROOT'] = TARGET_DIR
   getos = os.path.join(TARGET_DIR, 'tools', 'getos.py')
@@ -227,9 +232,9 @@ def main(argv):
   url, version = DetermineSDKURL(flavor,
                                  base_url=GS_URL_BASE,
                                  version=options.version)
-  print 'SDK URL is "%s"' % url
+  print('SDK URL is "%s"' % url)
   if version == existing_version:
-    print 'SDK revision %s is already downlaoded' % version
+    print('SDK revision %s is already downlaoded' % version)
     return 0
 
 

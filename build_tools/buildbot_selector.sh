@@ -3,6 +3,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
 # Main entry point for buildbots.
 # For local testing set BUILDBOT_BUILDERNAME and TEST_BUILDBOT, e.g:
 #  export TEST_BUILDBOT=1
@@ -24,14 +27,9 @@ else
   export GSUTIL=gsutil
 fi
 
-# Allows Linux Chromium builds to use the existing SUID Sandbox on the bots.
-# Ignored on other platforms.
-export CHROME_DEVEL_SANDBOX=/opt/chromium/chrome_sandbox
-
-
 # The bots set the BOTO_CONFIG environment variable to a different .boto file
 # (currently /b/build/site-config/.boto). override this to the gsutil default
-# which has access to gs://nativeclient-mirror.
+# which has access to gs://naclports.
 # gsutil also looks for AWS_CREDENTIAL_FILE, so clear that too.
 unset AWS_CREDENTIAL_FILE
 unset BOTO_CONFIG
@@ -47,13 +45,12 @@ if [ "${TEST_BUILDBOT:-}" = "1" -a -z "${BUILDBOT_BUILDERNAME:-}" ]; then
   export BUILDBOT_BUILDERNAME=linux-newlib-0
 fi
 
-StartBuild() {
-  export NACL_ARCH=$1
+BuildShard() {
   export TOOLCHAIN
   export SHARD
   export SHARDS
 
-  echo "@@@BUILD_STEP $1 setup@@@"
+  echo "@@@BUILD_STEP setup@@@"
   if ! ./build_tools/buildbot_build_shard.sh ; then
     RESULT=1
   fi
@@ -61,17 +58,24 @@ StartBuild() {
 
 Publish() {
   echo "@@@BUILD_STEP upload binaries@@@"
-  echo "Uploading to ${UPLOAD_PATH}"
 
-  ${GSUTIL} cp -R -a public-read out/publish/* gs://${UPLOAD_PATH}/publish/
+  if [ "$(ls out/publish)" != "" ]; then
+    echo "Uploading publish directory to ${UPLOAD_PATH}"
+    ${GSUTIL} cp -R -a public-read out/publish/* gs://${UPLOAD_PATH}/publish/
+  else
+    echo "Nothing to upload in publish directory."
+  fi
+
+  if [ "$(ls out/packages)" != "" ]; then
+    echo "Uploading packages directory to ${UPLOAD_PATH}"
+    ${GSUTIL} cp -R -a public-read out/packages/* gs://${UPLOAD_PATH}/packages/
+  else
+    echo "Nothing to upload in packages directory."
+  fi
 
   local URL="http://gsdview.appspot.com/${UPLOAD_PATH}/"
   echo "@@@STEP_LINK@browse@${URL}@@@"
 }
-
-if [[ ${BUILDBOT_BUILDERNAME} =~ periodic-* ]]; then
-  NACLPORTS_NO_UPLOAD=1
-fi
 
 # Strip 'periodic-' prefix.
 BUILDBOT_BUILDERNAME=${BUILDBOT_BUILDERNAME#periodic-}
@@ -81,8 +85,19 @@ if [ "${BUILDBOT_BUILDERNAME}" = "linux-sdk" ]; then
   readonly OS=linux
 else
   # Decode buildername.
-  readonly BNAME_REGEX="(nightly-)?(.+)-(.+)-(.+)"
-  if [[ ${BUILDBOT_BUILDERNAME} =~ $BNAME_REGEX ]]; then
+  readonly BNAME_REGEX="(nightly-|naclports-)?(.+)-(.+)-(.+)"
+  if [[ ${BUILDBOT_BUILDERNAME} =~ ${BNAME_REGEX} ]]; then
+    readonly PREFIX=${BASH_REMATCH[1]}
+    if [ "${PREFIX}" = "naclports-" ]; then
+      readonly TRYBOT=1
+      readonly NIGHTLY=0
+    elif [ "${PREFIX}" = "nightly-" ]; then
+      readonly TRYBOT=0
+      readonly NIGHTLY=1
+    else
+      readonly TRYBOT=0
+      readonly NIGHTLY=0
+    fi
     readonly OS=${BASH_REMATCH[2]}
     readonly LIBC=${BASH_REMATCH[3]}
     readonly SHARD=${BASH_REMATCH[4]}
@@ -91,19 +106,24 @@ else
     exit 1
   fi
 
+  # Don't upload periodic or trybot builds.
+  if [ "${TRYBOT}" = "1" -o "${NIGHTLY}" = "1" ]; then
+    NACLPORTS_NO_UPLOAD=1
+  fi
+
   # Select platform specific things.
-  if [ "$OS" = "win" ]; then
+  if [ "${OS}" = "win" ]; then
     PYTHON=python.bat
   fi
 
   # Select libc
-  if [ "$LIBC" = "glibc" ]; then
+  if [ "${LIBC}" = "glibc" ]; then
     TOOLCHAIN=glibc
-  elif [ "$LIBC" = "newlib" ]; then
+  elif [ "${LIBC}" = "newlib" ]; then
     TOOLCHAIN=newlib
-  elif [ "$LIBC" = "pnacl_newlib" ]; then
+  elif [ "${LIBC}" = "pnacl_newlib" ]; then
     TOOLCHAIN=pnacl
-  elif [ "$LIBC" = "bionic" ]; then
+  elif [ "${LIBC}" = "bionic" ]; then
     TOOLCHAIN=bionic
   else
     echo "Bad LIBC: ${LIBC}" 1>&2
@@ -111,30 +131,56 @@ else
   fi
 
   # Select shard count
-  if [ "$OS" = "mac" ]; then
-    readonly SHARDS=2
-  elif [ "$OS" = "linux" ]; then
-    if [ "$TOOLCHAIN" = "glibc" ]; then
-      readonly SHARDS=4
-    elif [ "$TOOLCHAIN" = "newlib" ]; then
-      readonly SHARDS=3
-    elif [ "$TOOLCHAIN" = "bionic" ]; then
-      readonly SHARDS=1
-    elif [ "$TOOLCHAIN" = "pnacl" ]; then
-      readonly SHARDS=4
+  if [ "${OS}" = "mac" ]; then
+    SHARDS=2
+  elif [ "${OS}" = "linux" ]; then
+    if [ "${TOOLCHAIN}" = "glibc" ]; then
+      SHARDS=4
+    elif [ "${TOOLCHAIN}" = "newlib" ]; then
+      SHARDS=3
+    elif [ "${TOOLCHAIN}" = "bionic" ]; then
+      SHARDS=1
+    elif [ "${TOOLCHAIN}" = "pnacl" ]; then
+      SHARDS=4
     else
       echo "Unspecified sharding for TOOLCHAIN: ${TOOLCHAIN}" 1>&2
     fi
   else
     echo "Unspecified sharding for OS: ${OS}" 1>&2
   fi
+
+  # For the trybots we have 5 shards for each toolchain
+  if [ "${TRYBOT}" = "1" ]; then
+    SHARDS=5
+  fi
+fi
+
+# Optional Clobber (if checked in the buildbot ui).
+if [ "${BUILDBOT_CLOBBER:-}" = "1" ]; then
+  echo "@@@BUILD_STEP Clobber@@@"
+  rm -rf out/
 fi
 
 # Install SDK.
 if [ -z "${TEST_BUILDBOT:-}" -o ! -d ${NACL_SDK_ROOT} ]; then
   echo "@@@BUILD_STEP Install Latest SDK@@@"
-  ${PYTHON} ${SCRIPT_DIR}/download_sdk.py
+  ARGS=""
+  if [ ${TOOLCHAIN:-} = bionic ]; then
+    ARGS="--bionic"
+  fi
+  echo ${PYTHON} ${SCRIPT_DIR}/download_sdk.py ${ARGS}
+  ${PYTHON} ${SCRIPT_DIR}/download_sdk.py ${ARGS}
 fi
+
+Unittests() {
+  echo "@@@BUILD_STEP naclports unittests@@@"
+  CMD=${SCRIPT_DIR}/../lib/naclports_test.py
+  echo "Running ${CMD}"
+  if ! ${PYTHON} ${CMD}; then
+    RESULT=1
+    echo "@@@STEP_FAILURE@@@"
+  fi
+}
 
 # Test browser testing harness.
 PlumbingTests() {
@@ -144,7 +190,7 @@ PlumbingTests() {
     RESULT=1
     echo "@@@STEP_FAILURE@@@"
   fi
-  if [ "$OS" = "linux" ]; then
+  if [ "${OS}" = "linux" ]; then
     echo "@@@BUILD_STEP plumbing_tests x86_64@@@"
     if ! ${PYTHON} ${SCRIPT_DIR}/../chrome_test/plumbing_test.py \
         -a x86_64 -x -vv; then
@@ -154,6 +200,7 @@ PlumbingTests() {
   fi
 }
 
+Unittests
 PlumbingTests
 
 # PEPPER_DIR is the root direcotry name within the bundle. e.g. pepper_28
@@ -170,26 +217,12 @@ if [ "${BUILDBOT_BUILDERNAME}" = "linux-sdk" ]; then
   exit 0
 fi
 
-if [ "${LIBC}" = "pnacl_newlib" ] ; then
-  StartBuild pnacl
-else
-  if [ "${TOOLCHAIN}" != "bionic" ]; then
-    # Build 32-bit.
-    StartBuild i686
-
-    # Build 64-bit.
-    StartBuild x86_64
-  fi
-
-  # Build ARM.
-  if [ "${TOOLCHAIN}" != "glibc" ]; then
-    StartBuild arm
-  fi
-fi
+CleanCurrentToolchain
+BuildShard
 
 # Publish resulting builds to Google Storage, but only on the
 # linux bots.
-if [ -z "${NACLPORTS_NO_UPLOAD:-}" -a "$OS" = "linux" ]; then
+if [ -z "${NACLPORTS_NO_UPLOAD:-}" -a "${OS}" = "linux" ]; then
   Publish
 fi
 

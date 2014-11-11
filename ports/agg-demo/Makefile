@@ -2,8 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-VALID_TOOLCHAINS := glibc newlib pnacl
-NACL_SDK_ROOT ?= $(abspath $(CURDIR)/../..)
 include $(NACL_SDK_ROOT)/tools/common.mk
 
 TARGET = agg-demo
@@ -42,7 +40,7 @@ $(eval $(call NMF_RULE,$(TARGET),))
 install:
 	mkdir -p $(INSTALL_DIR)
 	cp $(OUTDIR)/$(TARGET)*$(EXEEXT) $(INSTALL_DIR)
-	rm -f $(INSTALL_DIR)/*_unstripped_*$(EXEEXT)
+	rm -f $(INSTALL_DIR)/*_unstripped*$(EXEEXT)
 	cp $(OUTDIR)/$(TARGET).nmf $(INSTALL_DIR)
 	cp index.html $(INSTALL_DIR)
 ifeq ($(TOOLCHAIN),pnacl)

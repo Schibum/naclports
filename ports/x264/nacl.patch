@@ -1,86 +1,49 @@
 diff --git a/common/cpu.c b/common/cpu.c
-index ffaa4ad..72cc6f7 100644
+index 837de89..f2fa468 100644
 --- a/common/cpu.c
 +++ b/common/cpu.c
-@@ -416,6 +416,7 @@ uint32_t x264_cpu_detect( void )
+@@ -93,7 +93,7 @@ const x264_cpu_name_t x264_cpu_names[] =
+     {"", 0},
+ };
  
- int x264_cpu_num_processors( void )
- {
-+    return sysconf(_SC_NPROCESSORS_ONLN);
- #if !HAVE_THREAD
-     return 1;
- 
-diff --git a/common/osdep.h b/common/osdep.h
-index 054953d..bfdc05b 100644
---- a/common/osdep.h
-+++ b/common/osdep.h
-@@ -369,7 +369,7 @@ static ALWAYS_INLINE void x264_prefetch( void *p )
- }
- #else
- #include <unistd.h>
--#define x264_lower_thread_priority(p) { UNUSED int nice_ret = nice(p); }
-+#define x264_lower_thread_priority(p) { }
- #endif /* SYS_WINDOWS */
- #elif HAVE_WIN32THREAD
- #define x264_lower_thread_priority(p) SetThreadPriority( GetCurrentThread(), X264_MAX( -2, -p ) )
-diff --git a/config.sub b/config.sub
-index 8df5511..e1a8505 100755
---- a/config.sub
-+++ b/config.sub
-@@ -846,6 +846,14 @@ case $basic_machine in
- 		basic_machine=le32-unknown
- 		os=-nacl
- 		;;
-+	nacl)
-+		basic_machine=i686-pc
-+		os=-nacl
-+		;;
-+	pnacl)
-+		basic_machine=pnacl-pc
-+		os=-nacl
-+		;;
- 	ncr3000)
- 		basic_machine=i486-ncr
- 		os=-sysv4
-@@ -1379,7 +1387,7 @@ case $os in
- 	      | -os2* | -vos* | -palmos* | -uclinux* | -nucleus* \
- 	      | -morphos* | -superux* | -rtmk* | -rtmk-nova* | -windiss* \
- 	      | -powermax* | -dnix* | -nx6 | -nx7 | -sei* | -dragonfly* \
--	      | -skyos* | -haiku* | -rdos* | -toppers* | -drops* | -es*)
-+	      | -skyos* | -haiku* | -rdos* | -toppers* | -drops* | -es* | -nacl*)
- 	# Remember, each alternative MUST END IN *, to match a version number.
- 		;;
- 	-qnx*)
+-#if (ARCH_PPC && SYS_LINUX) || (ARCH_ARM && !HAVE_NEON)
++#if (ARCH_PPC && SYS_LINUX) || (ARCH_ARM && HAVE_ARMV6 && !HAVE_NEON)
+ #include <signal.h>
+ #include <setjmp.h>
+ static sigjmp_buf jmpbuf;
 diff --git a/configure b/configure
-index 3d714a5..be0e524 100755
+index 0a4cb94..2f84cc2 100755
 --- a/configure
 +++ b/configure
-@@ -499,6 +499,11 @@ case $host_os in
-         define HAVE_MALLOC_H
-         libm="-lm"
+@@ -547,6 +547,16 @@ case $host_os in
+         LDFLAGSCLI="$LDFLAGSCLI -lshell32"
+         [ $compiler = GNU ] && RC="${RC-${cross_prefix}windres}" || RC="${RC-rc}"
          ;;
 +    *nacl*)
 +        SYS="NACL"
-+        CFLAGS="$CFLAGS -DHAVE_MALLOC_H"
-+        LDFLAGS="$LDFLAGS -lm"
++        define HAVE_MALLOC_H
++        if [[ $(basename ${CC}) =~ pnacl-* ]]; then
++            EXE=.pexe
++        else
++            EXE=.nexe
++        fi
++        libm="-lm"
 +        ;;
-     cygwin*)
-         EXE=".exe"
-         if cc_check "" -mno-cygwin; then
-@@ -764,11 +769,11 @@ define SYS_$SYS
+     sunos*|solaris*)
+         SYS="SunOS"
+         define HAVE_MALLOC_H
+@@ -773,11 +783,14 @@ ASFLAGS="$ASFLAGS -DSTACK_ALIGNMENT=$stack_alignment"
  if [ $compiler = GNU ]; then
      echo "int i[2] = {0x42494745,0}; double f[2] = {0x1.0656e6469616ep+102,0};" > conftest.c
      $CC $CFLAGS conftest.c -c -o conftest.o 2>/dev/null || die "endian test failed"
--    if (${cross_prefix}strings -a conftest.o | grep -q BIGE) && (${cross_prefix}strings -a conftest.o | grep -q FPendian) ; then
--        define WORDS_BIGENDIAN
--    elif !(${cross_prefix}strings -a conftest.o | grep -q EGIB && ${cross_prefix}strings -a conftest.o | grep -q naidnePF) ; then
--        die "endian test failed"
--    fi
-+    # if (${cross_prefix}strings -a conftest.o | grep -q BIGE) && (${cross_prefix}strings -a conftest.o | grep -q FPendian) ; then
-+    #     define WORDS_BIGENDIAN
-+    # elif !(${cross_prefix}strings -a conftest.o | grep -q EGIB && ${cross_prefix}strings -a conftest.o | grep -q naidnePF) ; then
-+    #     die "endian test failed"
-+    # fi
++    # there is no pnacl-strings binary.
++    if [[ ! $(basename ${CC}) =~ pnacl-* ]]; then
+     if (${cross_prefix}strings -a conftest.o | grep -q BIGE) && (${cross_prefix}strings -a conftest.o | grep -q FPendian) ; then
+         define WORDS_BIGENDIAN
+     elif !(${cross_prefix}strings -a conftest.o | grep -q EGIB && ${cross_prefix}strings -a conftest.o | grep -q naidnePF) ; then
+         die "endian test failed"
+     fi
++    fi
  fi
  
  # autodetect options that weren't forced nor disabled

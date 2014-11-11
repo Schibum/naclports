@@ -10,6 +10,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,35 +24,85 @@
 
 extern int nacl_main(int argc, char *argv[]);
 
+int nacl_spawn_pid;
+int nacl_spawn_ppid;
+
+// Get an environment variable as an int, or return -1 if the value cannot
+// be converted to an int.
+static int getenv_as_int(const char *env) {
+  const char* env_str = getenv(env);
+  if (!env_str) {
+    return -1;
+  }
+  errno = 0;
+  int env_int = strtol(env_str, NULL, 0);
+  if (errno) {
+    return -1;
+  }
+  return env_int;
+}
+
+static mkdir_checked(const char* dir) {
+  if (mkdir(dir, S_IRWXU | S_IRWXG | S_IRWXO) != 0) {
+    fprintf(stderr, "mkdir '%s' failed: %s\n", dir, strerror(errno));
+  }
+}
+
 int cli_main(int argc, char* argv[]) {
   umount("/");
   mount("", "/", "memfs", 0, NULL);
 
-  mkdir("/home", 0777);
-  mkdir("/tmp", 0777);
-  mkdir("/bin", 0777);
-  mkdir("/etc", 0777);
-  mkdir("/mnt", 0777);
-  mkdir("/mnt/http", 0777);
-  mkdir("/mnt/html5", 0777);
+  // Setup common environment variables, but don't override those
+  // set already by ppapi_simple.
+  setenv("HOME", "/home/user", 0);
+  setenv("PATH", "/bin", 0);
+  setenv("USER", "user", 0);
+  setenv("LOGNAME", "user", 0);
+
+  const char* home = getenv("HOME");
+  mkdir_checked("/home");
+  mkdir_checked(home);
+  mkdir_checked("/tmp");
+  mkdir_checked("/bin");
+  mkdir_checked("/etc");
+  mkdir_checked("/mnt");
+  mkdir_checked("/mnt/http");
+  mkdir_checked("/mnt/html5");
 
   const char* data_url = getenv("NACL_DATA_URL");
   if (!data_url)
     data_url = "./";
 
   if (mount(data_url, "/mnt/http", "httpfs", 0, "") != 0) {
-    perror("mounting http filesystem failed");
-    return 1;
+    perror("mounting http filesystem at /mnt/http failed");
   }
 
-  if (mount("/", "/mnt/html5", "html5fs", 0, "") != 0) {
-    perror("Mounting HTML5 filesystem failed. Please use --unlimited-storage");
+  if (mount("/", "/mnt/html5", "html5fs", 0, "type=PERSISTENT") != 0) {
+    perror("Mounting HTML5 filesystem in /mnt/html5 failed");
+  } else {
+    mkdir("/mnt/html5/home", 0777);
+    struct stat st;
+    if (stat("/mnt/html5/home", &st) < 0 || !S_ISDIR(st.st_mode)) {
+      perror("Unable to create home directory in persistent storage");
+    } else {
+      if (mount("/home", home, "html5fs", 0, "type=PERSISTENT") != 0) {
+        fprintf(stderr, "Mounting HTML5 filesystem in %s failed.\n", home);
+      }
+    }
   }
 
-  /* naclterm.js sends the current working directory using this
+  if (mount("/", "/tmp", "html5fs", 0, "type=TEMPORARY") != 0) {
+    perror("Mounting HTML5 filesystem in /tmp failed");
+  }
+
+  /* naclprocess.js sends the current working directory using this
    * environment variable. */
-  if (getenv("PWD"))
-    chdir(getenv("PWD"));
+  const char* pwd = getenv("PWD");
+  if (pwd != NULL) {
+    if (chdir(pwd)) {
+      fprintf(stderr, "chdir() to %s failed: %s\n", pwd, strerror(errno));
+    }
+  }
 
   // Tell the NaCl architecture to /etc/bashrc of mingn.
 #if defined(__x86_64__)
@@ -65,7 +116,17 @@ int cli_main(int argc, char* argv[]) {
 #else
 # error "Unknown architecture"
 #endif
-  setenv("NACL_ARCH", kNaClArch, 1);
+  // Set NACL_ARCH with a guess if not set (0 == set if not already).
+  setenv("NACL_ARCH", kNaClArch, 0);
+  // Set NACL_BOOT_ARCH if not inherited from a parent (0 == set if not already
+  // set). This will let us prefer PNaCl if we started with PNaCl (for tests
+  // mainly).
+  setenv("NACL_BOOT_ARCH", kNaClArch, 0);
+
+  setlocale(LC_CTYPE, "");
+
+  nacl_spawn_pid = getenv_as_int("NACL_PID");
+  nacl_spawn_ppid = getenv_as_int("NACL_PPID");
 
   return nacl_main(argc, argv);
 }

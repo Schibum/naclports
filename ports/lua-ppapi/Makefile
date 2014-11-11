@@ -2,12 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-VALID_TOOLCHAINS := glibc newlib pnacl
-NACL_SDK_ROOT ?= $(abspath $(CURDIR)/../..)
 include $(NACL_SDK_ROOT)/tools/common.mk
 
 TARGET = lua
 LIBS = lua ppapi_simple tar
+NACL_LDFLAGS += $(NACL_CLI_MAIN_LIB)
+PNACL_LDFLAGS += $(NACL_CLI_MAIN_LIB)
 
 ifeq ($(LUA_NO_READLINE),)
 LIBS += readline ncurses
@@ -82,6 +82,7 @@ install-tests: $(OUTBASE)/$(LUA_TESTS_FILE) $(OUTBASE)/$(SCIMARK) $(OUTBASE)/$(B
 	cp $(OUTBASE)/$(SCIMARK) $(OUTBASE)/$(BINARYTREES) $(INSTALL_DIR)
 
 install: install-tests
+	../../build_tools/template_expand.py manifest.json version=$(NACLPORTS_REVISION) > $(INSTALL_DIR)/manifest.json
 	LIBDOT_SEARCH_PATH=$(CHROMEAPPS) $(LIB_DOT)/bin/concat.sh -i $(NASSH)/concat/nassh_deps.concat -o $(INSTALL_DIR)/hterm.concat.js
 	cp $(OUTDIR)/lua*$(NACL_EXEEXT) $(INSTALL_DIR)
 	rm -f $(INSTALL_DIR)/*_unstripped*$(EXEEXT)
@@ -89,14 +90,15 @@ install: install-tests
 	cp index.html $(INSTALL_DIR)
 	cp lua.html $(INSTALL_DIR)
 	cp lua.js $(INSTALL_DIR)
+	cp ../../build_tools/pipeserver.js $(INSTALL_DIR)
+	cp ../../build_tools/naclprocess.js $(INSTALL_DIR)
 	cp ../../build_tools/naclterm.js $(INSTALL_DIR)
-	cp manifest.json ${INSTALL_DIR}
 	cp background.js ${INSTALL_DIR}
 	cp icon_16.png ${INSTALL_DIR}
 	cp icon_48.png ${INSTALL_DIR}
 	cp icon_128.png ${INSTALL_DIR}
 ifeq ($(TOOLCHAIN),pnacl)
-	sed -i.bak 's/x-nacl/x-pnacl/g' $(INSTALL_DIR)/naclterm.js
+	sed -i.bak 's/x-nacl/x-pnacl/g' $(INSTALL_DIR)/naclprocess.js
 endif
 ifeq ($(TOOLCHAIN),glibc)
 	cp -r $(OUTDIR)/lib* $(INSTALL_DIR)

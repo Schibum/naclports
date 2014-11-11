@@ -1,0 +1,45 @@
+#!/bin/bash
+# Copyright (c) 2014 The Native Client Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# This is for bash on NaCl. Note that you cannot use external commands
+# until the installation is completed. Also, you cannot use features
+# which nacl_io does not support yet (e.g., pipes and sub-shells).
+
+# Setup environment once to get location of fixed things like coreutils.
+source /mnt/http/setup-environment
+
+# Core packages.
+DEFAULT_PACKAGES="\
+  -i coreutils \
+  -i curl \
+  -i git \
+  -i make \
+  -i nano \
+  -i python \
+  -i vim"
+
+HAVE_GCC=0
+if [[ "${NACL_ARCH}" == "i686" || "${NACL_ARCH}" == "x86_64" ]]; then
+  DEFAULT_PACKAGES+=" \
+-i mingn.base \
+-i mingn.lib"
+  HAVE_GCC=1
+fi
+
+# Check for updates on some packages.
+package ${DEFAULT_PACKAGES[@]}
+
+if [ "${HAVE_GCC}" == 0 ]; then
+  echo "WARNING: gcc not yet available for your platform (coming soon)." 
+fi
+
+# Setup environment again, to rescan the packages added.
+source /mnt/http/setup-environment
+
+cd ${HOME}
+
+if [ -e ${HOME}/.bashrc ]; then
+  source ${HOME}/.bashrc
+fi

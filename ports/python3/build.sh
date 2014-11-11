@@ -1,4 +1,3 @@
-#!/bin/bash
 # Copyright (c) 2013 The Native Client Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -10,7 +9,7 @@ EXECUTABLES=python${NACL_EXEEXT}
 # The build relies on certain host binaries and python's configure
 # requires us to set --build= as well as --host=.
 
-HOST_BUILD_DIR=${WORK_DIR}/build-nacl-host
+HOST_BUILD_DIR=${WORK_DIR}/build_host
 export PATH=${HOST_BUILD_DIR}/inst/usr/local/bin:${PATH}
 
 BuildHostPython() {
@@ -20,7 +19,7 @@ BuildHostPython() {
     return
   fi
   LogExecute ${SRC_DIR}/configure
-  LogExecute make -j${OS_JOBS} build_all
+  LogExecute make -j${OS_JOBS} all
   LogExecute make install DESTDIR=inst
 }
 
@@ -39,6 +38,7 @@ ConfigureStep() {
   EXTRA_CONFIGURE_ARGS+=" --build=x86_64-linux-gnu"
   export LIBS="-ltermcap"
   if [ "${NACL_LIBC}" = "newlib" ]; then
+    NACLPORTS_CPPFLAGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat"
     LIBS+=" -lglibc-compat"
   fi
   DefaultConfigureStep
@@ -49,7 +49,7 @@ ConfigureStep() {
 
 BuildStep() {
   export CROSS_COMPILE=true
-  export MAKEFLAGS="PGEN=${WORK_DIR}/build-nacl-host/Parser/pgen"
+  export MAKEFLAGS="PGEN=${HOST_BUILD_DIR}/Parser/pgen"
   SetupCrossEnvironment
   DefaultBuildStep
 }
@@ -57,6 +57,12 @@ BuildStep() {
 TestStep() {
   if [ ${NACL_ARCH} = "pnacl" ]; then
     local pexe=python${NACL_EXEEXT}
-    TranslateAndWriteSelLdrScript ${pexe} x86-64 python.x86-64.nexe python
+    local script=python
+    # on Mac/Windows the folder called Python prevents us from creating a
+    # script called python (lowercase).
+    if [ ${OS_NAME} != "Linux" ]; then
+      script+=".sh"
+    fi
+    TranslateAndWriteSelLdrScript ${pexe} x86-64 python.x86-64.nexe ${script}
   fi
 }

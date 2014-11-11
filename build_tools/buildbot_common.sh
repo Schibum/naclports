@@ -9,22 +9,22 @@ MESSAGES=
 readonly BASE_DIR="$(dirname $0)/.."
 cd ${BASE_DIR}
 
-UPLOAD_PATH=nativeclient-mirror/naclports/${PEPPER_DIR}/
+UPLOAD_PATH=naclports/builds/${PEPPER_DIR}/
 if [ -d .git ]; then
-  UPLOAD_PATH+=`git number`-`git rev-parse --short HEAD`
+  UPLOAD_PATH+=$(git describe)
 else
   UPLOAD_PATH+=${BUILDBOT_GOT_REVISION}
 fi
 
 BuildSuccess() {
-  echo "naclports: Build SUCCEEDED $1 ($NACL_ARCH)"
+  echo "naclports: Build SUCCEEDED $1 (${NACL_ARCH}/${TOOLCHAIN})"
 }
 
 BuildFailure() {
-  MESSAGE="naclports: Build FAILED for $1 ($NACL_ARCH)"
-  echo $MESSAGE
+  MESSAGE="naclports: Build FAILED for $1 (${NACL_ARCH}/${TOOLCHAIN})"
+  echo ${MESSAGE}
   echo "@@@STEP_FAILURE@@@"
-  MESSAGES="$MESSAGES\n$MESSAGE"
+  MESSAGES="${MESSAGES}\n${MESSAGE}"
   RESULT=1
   if [ "${TEST_BUILDBOT:-}" = "1" ]; then
     exit 1
@@ -32,36 +32,99 @@ BuildFailure() {
 }
 
 RunCmd() {
-  echo $*
-  $*
+  echo "$@"
+  "$@"
 }
 
+NACLPORTS_ARGS="-v --ignore-disabled --from-source"
+
+#
+# Build a single package for a single architecture
+# $1 - Name of package to build
+#
 BuildPackage() {
-  echo "@@@BUILD_STEP ${NACL_ARCH} ${TOOLCHAIN} $1@@@"
-  if RunCmd build_tools/naclports.py build ports/$1 -v --ignore-disabled ; then
-    BuildSuccess $1
+  PACKAGE=$1
+  shift
+  if RunCmd bin/naclports ${NACLPORTS_ARGS} "$@" install ${PACKAGE}; then
+    BuildSuccess ${PACKAGE}
   else
-    BuildFailure $1
+    BuildFailure ${PACKAGE}
   fi
 }
 
-InstallPackage() {
-  echo "@@@BUILD_STEP ${NACL_ARCH} ${TOOLCHAIN} $1@@@"
-  export BUILD_FLAGS="-v --ignore-disabled"
-  if RunCmd make $1 ; then
-    BuildSuccess $1
-  else
-    # On cygwin retry each build 3 times before failing
-    uname=$(uname -s)
-    if [ ${uname:0:6} = "CYGWIN" ]; then
-      echo "@@@STEP_WARNINGS@@@"
-      for i in 1 2 3 ; do
-        if make $1 ; then
-          BuildSuccess $1
-          return
-        fi
-      done
+ARCH_LIST="i686 x86_64 arm pnacl"
+TOOLCHAIN_LIST="pnacl newlib glibc bionic"
+
+InstallPackageMultiArch() {
+  echo "@@@BUILD_STEP ${TOOLCHAIN} $1@@@"
+  for NACL_ARCH in ${ARCH_LIST}; do
+    export NACL_ARCH
+    # pnacl only works on pnacl and nowhere else.
+    if [ "${TOOLCHAIN}" = "pnacl" -a "${NACL_ARCH}" != "pnacl" ]; then
+      continue
     fi
-    BuildFailure $1
-  fi
+    if [ "${TOOLCHAIN}" != "pnacl" -a "${NACL_ARCH}" = "pnacl" ]; then
+      continue
+    fi
+    # glibc doesn't work on arm for now.
+    if [ "${TOOLCHAIN}" = "glibc" -a "${NACL_ARCH}" = "arm" ]; then
+      continue
+    fi
+    # bionic only works on arm for now.
+    if [ "${TOOLCHAIN}" = "bionic" -a "${NACL_ARCH}" != "arm" ]; then
+      continue
+    fi
+    if ! RunCmd bin/naclports uninstall --all ; then
+      BuildFailure $1
+      return
+    fi
+    if ! RunCmd bin/naclports ${NACLPORTS_ARGS} install $1 ; then
+      # Early exit if one of the architecures fails. This mean the
+      # failure is always at the end of the build step.
+      BuildFailure $1
+      return
+    fi
+  done
+  export NACL_ARCH=all
+  BuildSuccess $1
+}
+
+CleanToolchain() {
+  # Don't use TOOLCHAIN and NACL_ARCH here as we don't want to
+  # clobber the globals.
+  TC=$1
+  for ARCH in ${ARCH_LIST}; do
+    # TODO(bradnelson): reduce the duplication here.
+    # pnacl only works on pnacl and nowhere else.
+    if [ "${TC}" = "pnacl" -a "${ARCH}" != "pnacl" ]; then
+      continue
+    fi
+    if [ "${TC}" != "pnacl" -a "${ARCH}" = "pnacl" ]; then
+      continue
+    fi
+    # glibc doesn't work on arm for now.
+    if [ "${TC}" = "glibc" -a "${ARCH}" = "arm" ]; then
+      continue
+    fi
+    # bionic only works on arm for now.
+    if [ "${TC}" = "bionic" -a "${ARCH}" != "arm" ]; then
+      continue
+    fi
+    if ! TOOLCHAIN=${TC} NACL_ARCH=${ARCH} RunCmd \
+        bin/naclports clean --all; then
+      TOOLCHAIN=${TC} NACL_ARCH=${ARCH} BuildFailure clean
+    fi
+  done
+}
+
+CleanCurrentToolchain() {
+  echo "@@@BUILD_STEP clean@@@"
+  CleanToolchain ${TOOLCHAIN}
+}
+
+CleanAllToolchains() {
+  echo "@@@BUILD_STEP clean all@@@"
+  for TC in ${TOOLCHAIN_LIST}; do
+    CleanToolchain ${TC}
+  done
 }

@@ -4,11 +4,10 @@
  * found in the LICENSE file.
  */
 
-NaClTerm.prefix = 'ruby'
 NaClTerm.nmf = 'ruby.nmf'
 
 /*
- * Pass /usr/bin/irb as argv[1] by default so we get an interactive
+ * Pass /bin/irb as argv[1] by default so we get an interactive
  * shell
  */
-NaClTerm.argv = ['/usr/bin/irb']
+NaClTerm.argv = ['/bin/irb']

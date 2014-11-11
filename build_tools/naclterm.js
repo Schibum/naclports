@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 The Native Client Authors. All rights reserved.
+ * Copyright (c) 2014 The Native Client Authors. All rights reserved.
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
@@ -7,7 +7,8 @@
 'use strict';
 
 lib.rtdep('lib.f',
-          'hterm');
+          'hterm',
+          'NaClProcessManager');
 
 // CSP means that we can't kick off the initialization from the html file,
 // so we do it like this instead.
@@ -18,36 +19,66 @@ window.onload = function() {
 };
 
 /**
- * The hterm-powered terminal command.
- *
- * This class defines a command that can be run in an hterm.Terminal instance.
+ * This class uses the NaClProcessManager to run NaCl executables within an
+ * hterm.
  *
  * @param {Object} argv The argument object passed in from the Terminal.
  */
 function NaClTerm(argv) {
+  this.argv = argv;
   this.io = argv.io.push();
-  this.argv_ = argv;
+  this.width = this.io.terminal_.screenSize.width;
+
+  this.bufferedOutput = '';
+
+  // Have we started spawning the initial process?
+  this.started = false;
+
+  // Has the initial process finished loading?
+  this.loaded = false;
+
+  this.print = this.io.print.bind(this.io);
+
+  var mgr = this.processManager = new NaClProcessManager();
+  mgr.setStdoutListener(this.handleStdout_.bind(this));
+  mgr.setErrorListener(this.handleError_.bind(this));
+  mgr.setRootProgressListener(this.handleRootProgress_.bind(this));
+  mgr.setRootLoadListener(this.handleRootLoad_.bind(this));
 };
 
-// The process which gets the input from the user.
-var foreground_process;
-// Process information keyed by PID. The value is an embed DOM object
-// if the process is running. Once the process has finished, the value
-// will be the exit code.
-var processes = {};
-// Waiter processes keyed by the PID of the waited process. The waiter
-// is represented by a hash like
-// { element: embed DOM object, wait_req_id: the request ID string }
-var waiters = {};
-var pid = 0;
-var ansiCyan = '\x1b[36m';
-var ansiReset = '\x1b[0m';
+/**
+ * Flag for cyan coloring in the terminal.
+ * @const
+ */
+NaClTerm.ANSI_CYAN = '\x1b[36m';
 
 /**
- * Static initialier called from index.html.
+ * Flag for color reset in the terminal.
+ * @const
+ */
+NaClTerm.ANSI_RESET = '\x1b[0m';
+
+/*
+ * Character code for Control+C in the terminal.
+ * @type {number}
+ */
+NaClTerm.CONTROL_C = 3;
+
+/**
+ * Add the appropriate hooks to HTerm to start the session.
+ */
+NaClTerm.prototype.run = function() {
+  this.io.onVTKeystroke = this.onVTKeystroke_.bind(this);
+  this.io.sendString = this.onVTKeystroke_.bind(this);
+  this.io.onTerminalResize = this.onTerminalResize_.bind(this);
+
+  this.print(NaClTerm.ANSI_CYAN);
+}
+
+/**
+ * Static initializer called from index.html.
  *
- * This constructs a new Terminal instance and instructs it to run the NaClTerm
- * command.
+ * This constructs a new Terminal instance and instructs it to run a NaClTerm.
  */
 NaClTerm.init = function() {
   var profileName = lib.f.parseQuery(document.location.search)['profile'];
@@ -69,384 +100,180 @@ NaClTerm.init = function() {
 };
 
 /**
- * Makes the path in a NMF entry to fully specified path.
- *
+ * Handle stdout event from NaClProcessManager.
  * @private
+ * @param {string} msg The string sent to stdout.
  */
-NaClTerm.prototype.adjustNmfEntry_ = function(entry) {
-  for (var arch in entry) {
-    var path = entry[arch]['url'];
-    var html5_mount_point = '/mnt/html5';
-    if (path.indexOf(html5_mount_point) == 0) {
-      path = path.replace(html5_mount_point,
-                          'filesystem:' + location.origin + '/persistent');
-    } else {
-      // This is for the dynamic loader.
-      var base = location.href.match('.*/')[0];
-      path = base + path;
-    }
-    entry[arch]['url'] = path;
-  }
-}
-
-/**
- * Handle messages sent to us from NaCl.
- *
- * @private
- */
-NaClTerm.prototype.handleMessage_ = function(e) {
-  if (e.data['command'] == 'nacl_spawn') {
-    var msg = e.data;
-    console.log('nacl_spawn: ' + JSON.stringify(msg));
-    var args = msg['args'];
-    var envs = msg['envs'];
-    var cwd = msg['cwd'];
-    var executable = args[0];
-    var nmf = msg['nmf'];
-    if (nmf) {
-      if (nmf['files']) {
-        for (var key in nmf['files'])
-          this.adjustNmfEntry_(nmf['files'][key]);
-      }
-      this.adjustNmfEntry_(nmf['program']);
-      var blob = new Blob([JSON.stringify(nmf)], {type: 'text/plain'});
-      nmf = window.URL.createObjectURL(blob);
-    } else {
-      nmf = executable + '.nmf';
-    }
-    this.spawn(nmf, args, envs, cwd, executable, e);
-  } else if (e.data['command'] == 'nacl_wait') {
-    var msg = e.data;
-    console.log('nacl_wait: ' + JSON.stringify(msg));
-    var pid = msg['pid'];
-    this.waitpid(pid, e);
-  } else if (e.data.indexOf(NaClTerm.prefix) == 0) {
-    var msg = e.data.substring(NaClTerm.prefix.length);
-    if (!this.loaded) {
-      this.bufferedOutput += msg;
-    } else {
-      this.io.print(msg);
-    }
-  } else if (e.data.indexOf('exited') == 0) {
-    var exitCode = parseInt(e.data.split(':', 2)[1]);
-    if (isNaN(exitCode))
-      exitCode = 0;
-    this.exit(exitCode, e.srcElement);
+NaClTerm.prototype.handleStdout_ = function(msg) {
+  if (!this.loaded) {
+    this.bufferedOutput += msg;
   } else {
-    console.log('unexpected message: ' + e.data);
-    return;
+    this.print(msg);
   }
 }
 
 /**
- * Handle load error event from NaCl.
+ * Handle error event from NaCl.
+ * @private
+ * @param {string} cmd The name of the process with the error.
+ * @param {string} err The error message.
  */
-NaClTerm.prototype.handleLoadAbort_ = function(e) {
-  this.io.print('Load aborted.\n');
+NaClTerm.prototype.handleError_ = function(cmd, err) {
+  this.print(cmd + ': ' + err + '\n');
 }
 
 /**
- * Handle load abort event from NaCl.
+ * Notify the user when we are done loading a URL.
+ * @private
  */
-NaClTerm.prototype.handleLoadError_ = function(e) {
-  console.log('load error: ' + e.srcElement.spawn_req_id);
-  if (e.srcElement.spawn_req_id) {
-    var reply = {};
-    reply[e.srcElement.spawn_req_id] = -2;  // -ENOENT
-    console.log('handleLoadError: ' + JSON.stringify(reply));
-    e.srcElement.parent.postMessage(reply);
-    foreground_process = e.srcElement.parent;
-  }
-
-  this.io.print(e.srcElement.command_name + ': ' +
-                e.srcElement.lastError + '\n');
-  document.body.removeChild(e.srcElement);
-}
-
-NaClTerm.prototype.doneLoadingUrl = function() {
-  var width = this.io.terminal_.screenSize.width;
-  this.io.print('\r' + Array(width+1).join(' '));
+NaClTerm.prototype.doneLoadingUrl_ = function() {
+  var width = this.width;
+  this.print('\r' + Array(width+1).join(' '));
   var message = '\rLoaded ' + this.lastUrl;
   if (this.lastTotal) {
     var kbsize = Math.round(this.lastTotal/1024)
     message += ' ['+ kbsize + ' KiB]';
   }
-  this.io.print(message.slice(0, width) + '\n')
+  this.print(message.slice(0, width) + '\n')
 }
 
 /**
- * Handle load end event from NaCl.
+ * Handle load progress event from NaCl for the root process.
+ * @private
+ * @param {string} url The URL that is being loaded.
+ * @param {boolean} lengthComputable Is our progress quantitatively measurable?
+ * @param {number} loaded The number of bytes that have been loaded.
+ * @param {number} total The total number of bytes to be loaded.
  */
-NaClTerm.prototype.handleLoad_ = function(e) {
-  if (e.srcElement.spawn_req_id) {
-    var reply = {};
-    reply[e.srcElement.spawn_req_id] = e.srcElement.pid;
-    console.log('handleLoad: ' + JSON.stringify(reply));
-    e.srcElement.parent.postMessage(reply);
-  }
+NaClTerm.prototype.handleRootProgress_ = function(
+      url, lengthComputable, loaded, total) {
+  if (url !== undefined)
+    url = url.substring(url.lastIndexOf('/') + 1);
 
-  // Don't print loading messages, except for the
-  // root process.
-  if (!e.srcElement.parent) {
-    if (this.lastUrl)
-      this.doneLoadingUrl();
-    else
-      this.io.print('Loaded.\n');
-
-    this.io.print(ansiReset);
-  }
-
-  // Now that have completed loading and displaying
-  // loading messages we output any messages from the
-  // NaCl module that were buffered up unto this point
-  this.loaded = true;
-  this.io.print(this.bufferedOutput);
-  this.bufferedOutput = ''
-}
-
-/**
- * Handle load progress event from NaCl.
- */
-NaClTerm.prototype.handleProgress_ = function(e) {
-  var url = e.url.substring(e.url.lastIndexOf('/') + 1);
-
-  if (!e.srcElement.parent && this.lastUrl && this.lastUrl != url)
-    this.doneLoadingUrl()
+  if (this.lastUrl && this.lastUrl !== url)
+    this.doneLoadingUrl_()
 
   if (!url)
     return;
 
   this.lastUrl = url;
-  this.lastTotal = e.total;
-
-  if (e.srcElement.parent)
-    return;
+  this.lastTotal = total;
 
   var message = 'Loading ' + url;
-  if (e.lengthComputable && e.total) {
-    var percent = Math.round(e.loaded * 100 / e.total);
-    var kbloaded = Math.round(e.loaded / 1024);
-    var kbtotal = Math.round(e.total / 1024);
+  if (lengthComputable && total) {
+    var percent = Math.round(loaded * 100 / total);
+    var kbloaded = Math.round(loaded / 1024);
+    var kbtotal = Math.round(total / 1024);
     message += ' [' + kbloaded + ' KiB/' + kbtotal + ' KiB ' + percent + '%]';
   }
 
-  var width = this.io.terminal_.screenSize.width;
-  this.io.print('\r' + message.slice(-width));
+  this.print('\r' + message.slice(-this.width));
 }
 
 /**
- * Handle crash event from NaCl.
+ * Handle load end event from NaCl for the root process.
+ * @private
  */
-NaClTerm.prototype.handleCrash_ = function(e) {
-  this.exit(e.srcElement.exitStatus, e.srcElement);
+NaClTerm.prototype.handleRootLoad_ = function() {
+  if (this.lastUrl)
+    this.doneLoadingUrl_();
+  else
+    this.print('Loaded.\n');
+
+  this.print(NaClTerm.ANSI_RESET);
+
+  // Now that have completed loading and displaying
+  // loading messages we output any messages from the
+  // NaCl module that were buffered up unto this point
+  this.loaded = true;
+  this.print(this.bufferedOutput);
+  this.bufferedOutput = '';
 }
 
 /**
- * Exit the command.
+ * Clean up once the root process exits.
+ * @private
+ * @param {number} pid The PID of the process that exited.
+ * @param {number} status The exit code of the process.
  */
-NaClTerm.prototype.exit = function(code, element) {
-  if (!element.parent) {
-    this.io.print(ansiCyan)
+NaClTerm.prototype.handleExit_ = function(pid, status) {
+  this.print(NaClTerm.ANSI_CYAN)
 
-    // The root process finished.
-    if (code == -1) {
-      this.io.print('Program (' + element.command_name +
-                    ') crashed (exit status -1)\n');
-    } else {
-      this.io.print('Program (' + element.command_name + ') exited ' +
-                    '(status=' + code + ')\n');
-    }
-
-    this.io.pop();
-    if (this.argv_.onExit)
-      this.argv_.onExit(code);
-    return;
+  // The root process finished.
+  if (status === -1) {
+    this.print('Program (' + NaClTerm.nmf +
+                         ') crashed (exit status -1)\n');
+  } else {
+    this.print('Program (' + NaClTerm.nmf + ') exited ' +
+               '(status=' + status + ')\n');
   }
-
-  var pid = element.pid;
-  if (waiters[pid]) {
-    for (var i = 0; i < waiters[pid].length; i++) {
-      var waiter = waiters[pid][i];
-      var reply = {};
-      reply[waiter.wait_req_id] = code;
-      console.log('exit: ' + JSON.stringify(reply));
-      waiter.element.postMessage(reply);
-      waiter = null;
-    }
+  this.argv.io.pop();
+  if (this.argv.onExit) {
+    this.argv.onExit(status);
   }
-  processes[pid] = code;
-
-  // Mark as terminated.
-  element.pid = -1;
-  var next_foreground_process = null;
-  if (foreground_process == element) {
-    next_foreground_process = element.parent;
-    // When the parent has already finished, give the control to the
-    // grand parent.
-    while (next_foreground_process.pid == -1)
-      next_foreground_process = next_foreground_process.parent;
-  }
-  document.body.removeChild(element);
-  if (next_foreground_process)
-    foreground_process = next_foreground_process;
-  return;
-};
+}
 
 /**
- * Create the NaCl embed element.
- * We delay this until the first terminal resize event so that we start
+ * Spawn the root process (usually bash).
+ * @private
+ *
+ * We delay this call until the first terminal resize event so that we start
  * with the correct size.
  */
-NaClTerm.prototype.createEmbed = function(nmf, argv, envs, cwd,
-                                          width, height) {
-  var mimetype = 'application/x-nacl';
-  if (navigator.mimeTypes[mimetype] === undefined) {
-    if (mimetype.indexOf('pnacl') != -1)
-      this.io.print('Browser does not support PNaCl or PNaCl is disabled\n');
-    else
-      this.io.print('Browser does not support NaCl or NaCl is disabled\n');
-    return;
+NaClTerm.prototype.spawnRootProcess_ = function() {
+  var self = this;
+  var argv = NaClTerm.argv || [];
+  var env = NaClTerm.env || [];
+  argv = [NaClTerm.nmf].concat(argv);
+
+  try {
+    var handleSuccess = function(naclType) {
+      self.print('Loading NaCl module.\n');
+      self.processManager.spawn(
+          NaClTerm.nmf, argv, env, '/', naclType, null, function(rootPid) {
+        self.processManager.waitpid(rootPid, 0, self.handleExit_.bind(self));
+      });
+    };
+    var handleFailure = function(message) {
+      self.print(message);
+    };
+    self.processManager.checkUrlNaClManifestType(
+        NaClTerm.nmf, handleSuccess, handleFailure);
+  } catch (e) {
+    self.print(e.message);
   }
 
-  ++pid;
-  foreground_process = document.createElement('object');
-  foreground_process.pid = pid;
-  foreground_process.width = 0;
-  foreground_process.height = 0;
-  foreground_process.data = nmf;
-  foreground_process.type = mimetype;
-  foreground_process.addEventListener(
-      'message', this.handleMessage_.bind(this));
-  foreground_process.addEventListener(
-      'progress', this.handleProgress_.bind(this));
-  foreground_process.addEventListener('load', this.handleLoad_.bind(this));
-  foreground_process.addEventListener(
-      'error', this.handleLoadError_.bind(this));
-  foreground_process.addEventListener(
-      'abort', this.handleLoadAbort_.bind(this));
-  foreground_process.addEventListener('crash', this.handleCrash_.bind(this));
-  processes[pid] = foreground_process;
-
-  var params = {};
-  for (var i = 0; i < envs.length; i++) {
-    var env = envs[i];
-    var index = env.indexOf('=');
-    if (index < 0) {
-      console.error('Broken env: ' + env);
-      continue;
-    }
-    var key = env.substring(0, index);
-    if (key == 'SRC' || key == 'DATA' || key.match(/^ARG\d+$/i))
-      continue;
-    params[key] = env.substring(index + 1);
-  }
-
-  params['PS_TTY_PREFIX'] = NaClTerm.prefix;
-  params['PS_TTY_RESIZE'] = 'tty_resize';
-  params['PS_TTY_COLS'] = width ? width : this.tty_width;
-  params['PS_TTY_ROWS'] = height ? height : this.tty_height;
-  params['PS_STDIN'] = '/dev/tty';
-  params['PS_STDOUT'] = '/dev/tty';
-  params['PS_STDERR'] = '/dev/tty';
-  params['PS_VERBOSITY'] = '2';
-  params['PS_EXIT_MESSAGE'] = 'exited';
-  params['TERM'] = 'xterm-256color';
-  params['PWD'] = cwd;
-
-  function addParam(name, value) {
-    var param = document.createElement('param');
-    param.name = name;
-    param.value = value;
-    foreground_process.appendChild(param);
-  }
-
-  for (var key in params) {
-    addParam(key, params[key]);
-  }
-
-  // Add ARGV arguments from query parameters.
-  var args = lib.f.parseQuery(document.location.search);
-  for (var argname in args) {
-    addParam(argname, args[argname]);
-  }
-
-  // If the application has set NaClTerm.argv and there were
-  // no arguments set in the query parameters then add the default
-  // NaClTerm.argv arguments.
-  if (args['arg1'] === undefined && argv) {
-    var argn = 0;
-    argv.forEach(function(arg) {
-      var argname = 'arg' + argn;
-      addParam(argname, arg);
-      argn = argn + 1
-    })
-  }
-
-  // We show this message only for the first process.
-  if (pid == 1)
-    this.io.print('Loading NaCl module.\n');
-  document.body.appendChild(foreground_process);
+  self.started = true;
 }
 
-NaClTerm.prototype.spawn = function(nmf, argv, envs, cwd,
-                                    command_name, e) {
-  this.createEmbed(nmf, argv, envs, cwd);
-  foreground_process.parent = e.srcElement;
-  foreground_process.command_name = command_name;
-  foreground_process.spawn_req_id = e.data['id'];
-}
-
-NaClTerm.prototype.waitpid = function(pid, e) {
-  if (!processes[pid]) {
-    // The process does not exist.
-    var reply = {};
-    reply[e.data['id']] = -10;  // -ECHILD
-    console.log('waitpid (ECHILD): ' + JSON.stringify(reply));
-    e.srcElement.postMessage(reply);
-  } else if (typeof processes[pid] == 'number') {
-    // The process has already finished.
-    var reply = {};
-    reply[e.data['id']] = processes[pid];
-    delete processes[pid];
-    console.log('waitpid: ' + JSON.stringify(reply));
-    e.srcElement.postMessage(reply);
-  } else {
-    // Add the current process to the waiter list.
-    if (!waiters[pid])
-      waiters[pid] = [];
-    waiters[pid].push({ element: e.srcElement, wait_req_id: e.data['id'] });
-  }
-}
-
-NaClTerm.prototype.onTerminalResize_ = function(width, height) {
-  this.tty_width = width;
-  this.tty_height = height;
-  if (foreground_process === undefined) {
-    var argv = NaClTerm.argv || [];
-    argv = [NaClTerm.nmf].concat(argv);
-    this.createEmbed(NaClTerm.nmf, argv, [], '/', width, height);
-    // The root process has no parent.
-    foreground_process.parent = null;
-    foreground_process.command_name = NaClTerm.prefix;
-  } else {
-    foreground_process.postMessage({'tty_resize': [ width, height ]});
-  }
-}
-
-NaClTerm.prototype.onVTKeystroke_ = function(str) {
-  var message = {};
-  message[NaClTerm.prefix] = str;
-  foreground_process.postMessage(message);
-}
-
-/*
- * This is invoked by the terminal as a result of terminal.runCommandClass().
+/**
+ * Handle hterm terminal resize events.
+ * @private
+ * @param {number} width The width of the terminal.
+ * @param {number} height The height of the terminal.
  */
-NaClTerm.prototype.run = function() {
-  this.bufferedOutput = '';
-  this.loaded = false;
-  this.io.print(ansiCyan);
+NaClTerm.prototype.onTerminalResize_ = function(width, height) {
+  this.processManager.onTerminalResize(width, height);
+  if (!this.started) {
+    this.spawnRootProcess_();
+  }
+}
 
-  this.io.onVTKeystroke = this.onVTKeystroke_.bind(this);
-  this.io.onTerminalResize = this.onTerminalResize_.bind(this);
-};
+/**
+ * Handle hterm keystroke events.
+ * @private
+ * @param {string} str The characters sent by hterm.
+ */
+NaClTerm.prototype.onVTKeystroke_ = function(str) {
+  try {
+    if (str.charCodeAt(0) === NaClTerm.CONTROL_C) {
+      if (this.processManager.sigint()) {
+        this.print('\n');
+      }
+    } else {
+      this.processManager.sendStdinForeground(str);
+    }
+  } catch (e) {
+    this.print(e.message);
+  }
+}

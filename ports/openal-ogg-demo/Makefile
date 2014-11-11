@@ -1,17 +1,15 @@
 # Copyright (c) 2011 The Native Client Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-#
 
 # Build OpenAL/ogg demo with Pepper in C
 VALID_TOOLCHAINS := glibc newlib pnacl
-NACL_SDK_ROOT ?= $(abspath $(CURDIR)/../..)
 include $(NACL_SDK_ROOT)/tools/common.mk
 
 TARGET = openal-ogg-demo
 LIBS = openal vorbisfile vorbis ogg m ppapi pthread
 SOURCES = openal_ogg.c ogg_buffer_reader.c
-INSTALL_DIR = $(NACL_PACKAGES_PUBLISH)/openal-ogg-demo/$(TOOLCHAIN)
+INSTALL_DIR = $(NACL_PACKAGES_PUBLISH)/$(TARGET)/$(TOOLCHAIN)
 CFLAGS = -Wall -Werror
 
 ifeq ($(TOOLCHAIN),pnacl)
@@ -45,7 +43,7 @@ $(eval $(call NMF_RULE,$(TARGET),))
 install:
 	mkdir -p $(INSTALL_DIR)
 	cp $(OUTDIR)/$(TARGET)*$(EXEEXT) $(INSTALL_DIR)
-	rm -f $(INSTALL_DIR)/*_unstripped_*$(EXEEXT)
+	rm -f $(INSTALL_DIR)/*_unstripped*$(EXEEXT)
 	cp $(OUTDIR)/$(TARGET).nmf $(INSTALL_DIR)
 ifeq ($(TOOLCHAIN),glibc)
 	  cp -r $(OUTDIR)/lib* $(INSTALL_DIR)

@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 VALID_TOOLCHAINS := glibc newlib pnacl
-NACL_SDK_ROOT ?= $(abspath $(CURDIR)/../..)
 include $(NACL_SDK_ROOT)/tools/common.mk
 
 TARGET = ruby
@@ -58,37 +57,47 @@ endif
 $(eval $(call NMF_RULE,$(TARGET),))
 
 DATA_ARCHIVE = $(INSTALL_DIR)/rbdata-$(NACL_ARCH).tar
-ASSETS = usr/bin/irb usr/lib/ruby/2.0.0
+ASSETS = bin/irb lib/ruby/2.0.0
 ifeq ($(TOOLCHAIN),glibc)
 EXTRA_LIBS = lib/libz.so.1 lib/libreadline.so lib/libncurses.so.5
 endif
 
 CHROMEAPPS = $(NACL_SRC)/third_party/libapps/
 LIB_DOT = $(CHROMEAPPS)/libdot
-NASSH = $(CHROMEAPPS)/nassh
+HTERM = $(CHROMEAPPS)/hterm
 
-install:
+install-hterm:
 	mkdir -p $(INSTALL_DIR)
-	tar -h -c -C ${NACLPORTS_PREFIX}/.. -f $(DATA_ARCHIVE) ${ASSETS}
-ifeq ($(TOOLCHAIN),glibc)
-	tar -h -r -C ${NACLPORTS_PREFIX} -f $(DATA_ARCHIVE) ${EXTRA_LIBS}
+	LIBDOT_SEARCH_PATH=$(CHROMEAPPS) $(LIB_DOT)/bin/concat.sh -i $(HTERM)/concat/hterm_deps.concat -o $(INSTALL_DIR)/hterm.concat.js
+	LIBDOT_SEARCH_PATH=$(CHROMEAPPS) $(LIB_DOT)/bin/concat.sh -i $(HTERM)/concat/hterm.concat -o $(INSTALL_DIR)/hterm2.concat.js
+	chmod +w $(INSTALL_DIR)/hterm2.concat.js $(INSTALL_DIR)/hterm.concat.js
+	cat $(INSTALL_DIR)/hterm2.concat.js >> $(INSTALL_DIR)/hterm.concat.js
+	rm $(INSTALL_DIR)/hterm2.concat.js
+	cp ../../build_tools/naclterm.js $(INSTALL_DIR)
+	cp ../../build_tools/pipeserver.js $(INSTALL_DIR)
+	cp ../../build_tools/naclprocess.js $(INSTALL_DIR)
+ifeq ($(TOOLCHAIN),pnacl)
+	sed -i.bak 's/x-nacl/x-pnacl/g' $(INSTALL_DIR)/naclprocess.js
 endif
-	LIBDOT_SEARCH_PATH=$(CHROMEAPPS) $(LIB_DOT)/bin/concat.sh -i $(NASSH)/concat/nassh_deps.concat -o $(INSTALL_DIR)/hterm.concat.js
+
+install: install-hterm
+	../../build_tools/template_expand.py manifest.json version=$(NACLPORTS_REVISION) > $(INSTALL_DIR)/manifest.json
+	tar -h -c -C ${NACL_PREFIX} -f $(DATA_ARCHIVE) ${ASSETS}
+ifeq ($(TOOLCHAIN),glibc)
+	tar -h -r -C ${NACL_PREFIX} -f $(DATA_ARCHIVE) ${EXTRA_LIBS}
+endif
 	cp $(OUTDIR)/ruby*$(EXEEXT) $(INSTALL_DIR)
-	rm -f $(INSTALL_DIR)/*_unstripped_*$(EXEEXT)
+	rm -f $(INSTALL_DIR)/*_unstripped*$(EXEEXT)
 	cp $(OUTDIR)/ruby.nmf $(INSTALL_DIR)
 	cp index.html $(INSTALL_DIR)
 	cp ruby.js $(INSTALL_DIR)
-	cp ../../build_tools/naclterm.js $(INSTALL_DIR)
-	cp manifest.json ${INSTALL_DIR}
 	cp background.js ${INSTALL_DIR}
 	cp icon_16.png ${INSTALL_DIR}
 	cp icon_48.png ${INSTALL_DIR}
 	cp icon_128.png ${INSTALL_DIR}
-ifeq ($(TOOLCHAIN),pnacl)
-	sed -i.bak 's/x-nacl/x-pnacl/g' $(INSTALL_DIR)/naclterm.js
-endif
 ifeq ($(TOOLCHAIN),glibc)
 	cp -r $(OUTDIR)/lib* $(INSTALL_DIR)
 endif
 	cd $(INSTALL_DIR) && rm -f ruby.zip && zip -r ruby.zip .
+
+.PHONY: install-hterm

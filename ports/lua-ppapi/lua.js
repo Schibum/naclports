@@ -4,7 +4,6 @@
  * found in the LICENSE file.
  */
 
-NaClTerm.prefix = 'lua'
 NaClTerm.nmf = 'lua.nmf'
 
 function log(message) {

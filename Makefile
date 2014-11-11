@@ -11,19 +11,52 @@
 # Each port has a dependency on its own sentinel file, which can be found
 # at out/sentinels/*
 
-SDK_LIBS = zlib tiff jpeg8d libpng freetype lua5.2 libmodplug libogg
+SDK_LIBS = zlib tiff jpeg8d libpng freetype lua5.2 libogg
 SDK_LIBS += libtheora libvorbis libwebp libxml2 tinyxml openal-soft freealut
 
+COVERAGE = coverage
+COVERAGE_ARGS = --fail-under=56
+COVERAGE_VER := $(shell $(COVERAGE) --version 2>/dev/null)
+
+ifndef COVERAGE_VER
+# Debian/Ubuntu ship the coverage binary as 'python-coverage' so check
+# for that if coverage is not found.
+# The version in ubunaru/precise 3.4 does not support the --fail-under
+# argument.
+COVERAGE_VER := $(shell python-coverage --version 2>/dev/null)
+ifdef COVERAGE_VER
+COVERAGE = python-coverage
+COVERAGE_ARGS =
+endif
+endif
+
 ifeq ($(V),1)
-VERBOSE?=1
+VERBOSE ?= 1
+endif
+
+ifeq ($(F),1)
+FORCE ?= 1
+endif
+
+ifeq ($(V),2)
+VERBOSE ?= 1
+VERBOSE_BUILD ?= 1
 endif
 
 ifeq ($(VERBOSE),1)
-BUILD_FLAGS+=-v
+BUILD_FLAGS += -v
+endif
+
+ifeq ($(VERBOSE_BUILD),1)
+BUILD_FLAGS += --verbose-build
 endif
 
 ifeq ($(FORCE),1)
-BUILD_FLAGS+=-f
+BUILD_FLAGS += -f
+endif
+
+ifeq ($(FROM_SOURCE),1)
+BUILD_FLAGS += --from-source
 endif
 
 export NACL_ARCH
@@ -31,7 +64,7 @@ export TOOLCHAIN
 export NACL_GLIBC
 
 all:
-	build_tools/naclports.py --all install $(BUILD_FLAGS)
+	bin/naclports --all install $(BUILD_FLAGS)
 
 sdklibs: $(SDK_LIBS)
 
@@ -39,15 +72,24 @@ sdklibs_list:
 	@echo $(SDK_LIBS)
 
 run:
-	./httpd.py
+	./build_tools/httpd.py
 
 clean:
-	build_tools/naclports.py --all clean
+	bin/naclports --all clean
 
 reallyclean: clean
 	rm -rf $(NACL_OUT)
 
-%:
-	build_tools/naclports.py install $* $(BUILD_FLAGS)
+check: test
 
-.PHONY: all run clean sdklibs sdklibs_list reallyclean
+test:
+	build_tools/build_tools_test.py
+	$(COVERAGE) run --include=lib/naclports/* lib/naclports_test.py
+	$(COVERAGE) report $(COVERAGE_ARGS)
+	@rm -rf out/coverage_html
+	$(COVERAGE) html
+
+%:
+	bin/naclports install $* $(BUILD_FLAGS)
+
+.PHONY: all run clean sdklibs sdklibs_list reallyclean check test

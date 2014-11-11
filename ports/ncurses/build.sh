@@ -1,9 +1,10 @@
-#!/bin/bash
 # Copyright (c) 2012 The Native Client Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-EXTRA_CONFIGURE_ARGS="--disable-database"
+EXECUTABLES="progs/clear${NACL_EXEEXT}"
+
+EXTRA_CONFIGURE_ARGS+=" --disable-database"
 EXTRA_CONFIGURE_ARGS+=" --with-fallbacks=xterm-256color,vt100"
 EXTRA_CONFIGURE_ARGS+=" --disable-termcap"
 # Without this ncurses headers will be installed include/ncurses
@@ -19,6 +20,8 @@ if [ "${NACL_ARCH}" = "pnacl" ] ; then
 fi
 
 ConfigureStep() {
+  export cf_cv_ar_flags=${NACL_ARFLAGS}
+  NACL_ARFLAGS=""
   if [ "${NACL_LIBC}" = "newlib" ]; then
     # Changing NACLCC rather than CFLAGS as otherwise the configure script
     # fails to detect termios and tries to use gtty.

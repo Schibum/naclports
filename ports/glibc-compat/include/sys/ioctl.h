@@ -22,6 +22,7 @@
 #define TIOCGPGRP	0x540F
 #define TIOCGWINSZ	0x5413
 #define TIOCSWINSZ	0x5414
+#define TCXONC          0x540A
 
 struct winsize
   {
@@ -78,8 +79,19 @@ struct termio
 #define TCGETA		0x5405
 #define TCSETA		0x5406
 
+#define FIONREAD 0x541B
+#define FIONBIO 0x5421
+
 /* end olonho hack */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 int ioctl(int fd,int request,...);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

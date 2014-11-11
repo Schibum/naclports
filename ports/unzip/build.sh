@@ -1,4 +1,3 @@
-#!/bin/bash
 # Copyright (c) 2014 The Native Client Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -17,7 +16,8 @@ BuildStep() {
   make -j${OS_JOBS} -f unix/Makefile unzips \
       CC=${NACLCC} LD=${NACLCXX} \
       CFLAGS="${NACLPORTS_CPPFLAGS} ${NACLPORTS_CFLAGS} \
-      -DHAVE_TERMIOS_H -DNO_LCHMOD -Dmain=nacl_main" \
+      -DHAVE_TERMIOS_H -DNO_CHMOD -DNO_FCHMOD -DNO_LCHMOD \
+      -Dmain=nacl_main" LF2= \
       LFLAGS1="${NACLPORTS_LDFLAGS} ${NACL_CLI_MAIN_LIB} \
                -lppapi_simple -lnacl_io -lppapi -lppapi_cpp"
 }
@@ -25,7 +25,11 @@ BuildStep() {
 InstallStep() {
   MakeDir ${PUBLISH_DIR}
   for name in funzip unzip unzipsfx; do
-    cp ${name} ${PUBLISH_DIR}/${name}_${NACL_ARCH}${NACL_EXEEXT}
+    local exe="${PUBLISH_DIR}/${name}_${NACL_ARCH}${NACL_EXEEXT}"
+    cp ${name} ${exe}
+    if [ "${NACL_ARCH}" = "pnacl" ]; then
+      LogExecute ${PNACLFINALIZE} ${exe}
+    fi
 
     pushd ${PUBLISH_DIR}
     LogExecute python ${NACL_SDK_ROOT}/tools/create_nmf.py \

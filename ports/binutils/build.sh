@@ -1,12 +1,13 @@
-#!/bin/bash
 # Copyright (c) 2014 The Native Client Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-export EXTRA_LIBS="-lppapi -lppapi_cpp -lppapi_simple -lcli_main -lnacl_io"
-CONFIG_SUB=support/config.sub
+export ac_cv_func_getrlimit=no
+
+export EXTRA_LIBS="${NACL_CLI_MAIN_LIB} -lppapi_simple \
+  -lnacl_io -lppapi -lppapi_cpp -l${NACL_CPP_LIB}"
 EXTRA_CONFIGURE_ARGS="\
-  --target=x86_64-nacl \
+  --enable-targets=x86_64-nacl,arm-nacl,avr \
   --disable-werror \
   --enable-deterministic-archives \
   --without-zlib"

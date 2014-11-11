@@ -13,7 +13,9 @@ gsutil is required the run this script and if any mirroring operations are
 required then the correct gsutil credentials will be required.
 """
 
-import optparse
+from __future__ import print_function
+
+import argparse
 import os
 import shlex
 import subprocess
@@ -21,19 +23,26 @@ import sys
 import urllib
 import urlparse
 
-import naclports
-
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+NACLPORTS_ROOT = os.path.dirname(SCRIPT_DIR)
+sys.path.append(os.path.join(NACLPORTS_ROOT, 'lib'))
+
+import naclports
+import naclports.source_package
+
 MIRROR_GS = 'gs://naclports/mirror'
 
 
 def main(args):
-  parser = optparse.OptionParser()
-  parser.add_option('-n', '--dry-run', action='store_true',
-                    help="Don't actually upload anything")
-  parser.add_option('--check', action='store_true',
-                    help="Verify that the mirror is up-to-date.")
-  options, _ = parser.parse_args(args)
+  parser = argparse.ArgumentParser(description=__doc__)
+  parser.add_argument('-n', '--dry-run', action='store_true',
+                      help="Don't actually upload anything")
+  parser.add_argument('--check', action='store_true',
+                      help='Verify that the mirror is up-to-date.')
+  parser.add_argument('-v', '--verbose', action='store_true',
+                      help='Enable verbose output.')
+  options = parser.parse_args(args)
+  naclports.verbose = options.verbose
 
   ports_root = os.path.dirname(SCRIPT_DIR)
   listing = subprocess.check_output(['gsutil', 'ls', MIRROR_GS])
@@ -41,6 +50,7 @@ def main(args):
   listing = [os.path.basename(l) for l in listing]
 
   def CheckMirror(package):
+    naclports.Trace('Checking %s' % package.NAME)
     basename = package.GetArchiveFilename()
     if not basename:
       return
@@ -50,7 +60,7 @@ def main(args):
       return
 
     if options.check:
-      print 'update_mirror: Archive missing from mirror: %s' % basename
+      naclports.Log('update_mirror: Archive missing from mirror: %s' % basename)
       sys.exit(1)
 
     # Download upstream URL
@@ -58,17 +68,22 @@ def main(args):
 
     # Upload to gs
     url = '%s/%s' % (MIRROR_GS, basename)
-    print "Uploading to mirror: %s" % url
+    naclports.Log("Uploading to mirror: %s" % url)
     cmd = ['gsutil', 'cp', '-a', 'public-read', package.DownloadLocation(), url]
     if options.dry_run:
-      print cmd
+      naclports.Log(cmd)
     else:
       subprocess.check_call(cmd)
 
-  for package in naclports.PackageIterator():
+  count = 0
+  for package in naclports.source_package.SourcePackageIterator():
     CheckMirror(package)
+    count += 1
 
+  if options.check:
+    naclports.Log("Verfied mirroring for %d packages" % count)
   return 0
+
 
 if __name__ == '__main__':
   try:

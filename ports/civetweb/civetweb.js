@@ -6,7 +6,6 @@
 
 'use strict';
 
-NaClTerm.prefix = 'civetweb'
 NaClTerm.nmf = 'civetweb.nmf'
 
 lib.rtdep('lib.f')
