@@ -1,6 +1,6 @@
 NAME=ffmpeg
-VERSION=2.1.3
-URL=http://ffmpeg.org/releases/ffmpeg-2.1.3.tar.bz2
+VERSION=2.4.3
+URL=http://ffmpeg.org/releases/ffmpeg-2.4.3.tar.bz2
 LICENSE=GPL,LGPL
 DEPENDS=(libvorbis libvpx glibc-compat)
-SHA1=9dc54bbef673f3938e280bf48d07e7b24fe445ab
+SHA1=a2f05df7ea3e65ede2898e055b0c6615accfb1b3
