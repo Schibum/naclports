@@ -91,6 +91,15 @@ NaClTerm.init = function() {
   // We don't properly support the hterm bell sound, so we need to disable it.
   terminal.prefs_.definePreference('audible-bell-sound', '');
 
+  // TODO(bradnelson/rginda): Drop when hterm auto-detects this.
+  // Turn on open web friendly clipboard handling if we're not running
+  // in a chrome app.
+  if (!window.chrome || !chrome.runtime || !chrome.runtime.id) {
+    terminal.prefs_.definePreference('use-default-window-copy', true);
+    terminal.prefs_.definePreference('ctrl-c-copy', true);
+    terminal.prefs_.definePreference('ctrl-v-paste', true);
+  }
+
   terminal.setAutoCarriageReturn(true);
   terminal.setCursorPosition(0, 0);
   terminal.setCursorVisible(true);
@@ -208,6 +217,8 @@ NaClTerm.prototype.handleExit_ = function(pid, status) {
                '(status=' + status + ')\n');
   }
   this.argv.io.pop();
+  // Remove window close handler.
+  window.onbeforeunload = function() { return null; };
   if (this.argv.onExit) {
     this.argv.onExit(status);
   }
@@ -231,6 +242,10 @@ NaClTerm.prototype.spawnRootProcess_ = function() {
       self.print('Loading NaCl module.\n');
       self.processManager.spawn(
           NaClTerm.nmf, argv, env, '/', naclType, null, function(rootPid) {
+        // Warn if we close while still running.
+        window.onbeforeunload = function() {
+          return 'Processes still running!';
+        };
         self.processManager.waitpid(rootPid, 0, self.handleExit_.bind(self));
       });
     };

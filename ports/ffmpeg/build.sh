@@ -9,6 +9,11 @@ if [ "${NACL_LIBC}" = "newlib" ]; then
   NACLPORTS_CPPFLAGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat"
 fi
 
+if [ "${NACL_LIBC}" = "newlib" ]; then
+  # needed for RLIMIT_CPU
+  NACLPORTS_CPPFLAGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat"
+fi
+
 ConfigureStep() {
   SetupCrossEnvironment
 

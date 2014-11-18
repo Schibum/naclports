@@ -29,6 +29,17 @@ NACL_DEBUG=${NACL_DEBUG:-0}
 NACL_ENV_IMPORT=1
 . "${TOOLS_DIR}/nacl-env.sh"
 
+# export tool names for direct use in patches.
+export NACLCC
+export NACLCXX
+export NACLAR
+export NACLRANLIB
+export NACLLD
+export NACLREADELF
+export NACLSTRINGS
+export NACLSTRIP
+export NACL_EXEEXT
+
 # When run by a buildbot force all archives to come from the NaCl mirror
 # rather than using upstream URL.
 if [ -n "${BUILDBOT_BUILDERNAME:-}" ]; then
@@ -145,6 +156,7 @@ PATCH_FILE=${START_DIR}/nacl.patch
 
 # Don't support building with SDKs older than the current stable release
 MIN_SDK_VERSION=${MIN_SDK_VERSION:-37}
+NACLPORTS_QUICKBUILD=${NACLPORTS_QUICKBUILD:-0}
 
 if [ "${OS_NAME}" = "Darwin" ]; then
   OS_JOBS=4
@@ -244,7 +256,7 @@ fi
 CheckPatchVersion() {
   # refuse patch 2.6
   if ! which patch > /dev/null; then
-    echo 'patch command not found, please install and try again.'
+    echo 'error: patch command not found, please install and try again.'
     exit 1
   fi
   if [ "$(patch --version 2> /dev/null | sed q)" = "patch 2.6" ]; then
@@ -317,12 +329,16 @@ PatchSpecsFile() {
   # SPECS_FILE is where nacl-gcc 'specs' file will be installed
   local SPECS_DIR=
   if [ "${NACL_ARCH}" = "arm" ]; then
-    SPECS_DIR=${NACL_TOOLCHAIN_ROOT}/lib/gcc/arm-nacl/4.8.2
+    SPECS_DIR=${NACL_TOOLCHAIN_ROOT}/lib/gcc/arm-nacl/4.8.3
     if [ ! -d "${SPECS_DIR}" ]; then
-      SPECS_DIR=${NACL_TOOLCHAIN_ROOT}/lib/gcc/arm-nacl/4.8.3
+      SPECS_DIR=${NACL_TOOLCHAIN_ROOT}/lib/gcc/arm-nacl/4.9.2
     fi
   else
     SPECS_DIR=${NACL_TOOLCHAIN_ROOT}/lib/gcc/x86_64-nacl/4.4.3
+  fi
+  if [ ! -d "${SPECS_DIR}" ]; then
+    echo "error: gcc directory not found: ${SPECS_DIR}"
+    exit 1
   fi
   local SPECS_FILE=${SPECS_DIR}/specs
 
@@ -459,7 +475,7 @@ TryFetch() {
   if which curl > /dev/null ; then
     curl ${CURL_ARGS} -o "${FILENAME}" "${URL}"
   else
-    Banner "ERROR: could not find 'curl' in your PATH"
+    echo "error: could not find 'curl' in your PATH"
     exit 1
   fi
 }
@@ -536,7 +552,7 @@ GitCloneStep() {
       return
     fi
 
-    echo "Upstream archive or patch has changed."
+    echo "error: Upstream archive or patch has changed."
     echo "Please remove existing checkout to continue: '${SRC_DIR}'"
     exit 1
   fi
@@ -901,6 +917,55 @@ SetupCrossEnvironment() {
   echo "LDFLAGS=${LDFLAGS}"
 }
 
+GetRevision() {
+  cd ${NACL_SRC}
+  FULL_REVISION=$(git describe)
+  REVISION=$(echo "${FULL_REVISION}" | cut  -f2 -d-)
+  cd - > /dev/null
+}
+
+
+GenerateManifest() {
+  local SOURCE_FILE=$1
+  shift
+  local TARGET_DIR=$1
+  shift
+  local TEMPLATE_EXPAND="${START_DIR}/../../build_tools/template_expand.py"
+
+  # TODO(sbc): deal with versions greater than 16bit.
+  if (( REVISION >= 65536 )); then
+    echo "error: Version too great to store in revision field on manifest.json"
+    exit 1
+  fi
+
+  if [ $# -gt 0 ]; then
+    local KEY="$(cat $1)"
+  else
+    local KEY=""
+  fi
+  echo "Expanding ${SOURCE_FILE} > ${TARGET_DIR}/manifest.json"
+  # Generate a manifest.json
+  "${TEMPLATE_EXPAND}" "${SOURCE_FILE}" \
+    version=${REVISION} key="${KEY}" > ${TARGET_DIR}/manifest.json
+}
+
+
+FixupExecutablesList() {
+  # Modify EXECUTABLES list for libtool case where actual executables
+  # live within the ".libs" folder.
+  local executables_modified=
+  for nexe in ${EXECUTABLES:-}; do
+    local basename=$(basename ${nexe})
+    local dirname=$(dirname ${nexe})
+    if [ -f "${dirname}/.libs/${basename}" ]; then
+      executables_modified+=" ${dirname}/.libs/${basename}"
+    else
+      executables_modified+=" ${nexe}"
+    fi
+  done
+  EXECUTABLES=${executables_modified}
+}
+
 
 GetRevision() {
   cd ${NACL_SRC}
@@ -975,7 +1040,7 @@ DefaultExtractStep() {
 
   Banner "Extracting ${ARCHIVE_NAME}"
   if [ -d "${SRC_DIR}" ]; then
-    echo "Upstream archive or patch has changed."
+    echo "error: Upstream archive or patch has changed."
     echo "Please remove existing workspace to continue: '${SRC_DIR}'"
     exit 1
   fi
@@ -1060,7 +1125,7 @@ DefaultPatchStep() {
 DefaultConfigureStep() {
   local CONFIGURE=${NACL_CONFIGURE_PATH:-${SRC_DIR}/configure}
 
-  if [ "${NACLPORTS_QUICKBUILD:-}" = "1" ]; then
+  if [ "${NACLPORTS_QUICKBUILD}" = "1" ]; then
     CONFIGURE_SENTINEL=${CONFIGURE_SENTINEL:-Makefile}
   fi
 
@@ -1125,11 +1190,6 @@ ConfigureStep_CMake() {
     EXTRA_CMAKE_ARGS+=" -GNinja"
   fi
 
-  EXTRA_CMAKE_ARGS=${EXTRA_CMAKE_ARGS:-}
-  if [ "${NACL_LIBC}" = "newlib" ]; then
-    EXTRA_CMAKE_ARGS+=" -DEXTRA_INCLUDE=${NACLPORTS_INCLUDE}/glibc-compat"
-  fi
-
   if [ $NACL_DEBUG = "1" ]; then
     BUILD_TYPE=DEBUG
   else
@@ -1137,6 +1197,8 @@ ConfigureStep_CMake() {
   fi
 
   SetupCrossPaths
+  export CFLAGS="${NACLPORTS_CPPFLAGS} ${NACLPORTS_CFLAGS}"
+  export CXXFLAGS="${NACLPORTS_CPPFLAGS} ${NACLPORTS_CXXFLAGS}"
   LogExecute cmake "${SRC_DIR}" \
            -DCMAKE_TOOLCHAIN_FILE=${TOOLS_DIR}/XCompile-nacl.cmake \
            -DNACLAR=${NACLAR} \
@@ -1151,7 +1213,7 @@ ConfigureStep_CMake() {
            -DNACL_LIBC=${NACL_LIBC} \
            -DCMAKE_PREFIX_PATH=${NACL_PREFIX} \
            -DCMAKE_INSTALL_PREFIX=${PREFIX} \
-           -DCMAKE_BUILD_TYPE=${BUILD_TYPE} ${EXTRA_CMAKE_ARGS}
+           -DCMAKE_BUILD_TYPE=${BUILD_TYPE} ${EXTRA_CMAKE_ARGS:-}
 }
 
 
@@ -1445,7 +1507,7 @@ WriteSelLdrScriptForPNaCl() {
       irt_core="${NACL_IRT_X8664}"
       ;;
     *)
-      echo "No sel_ldr for ${arch}"
+      echo "error: No sel_ldr for ${arch}"
       exit 1
   esac
   cat > "${script_name}" <<HERE
@@ -1479,10 +1541,14 @@ TranslatePexe() {
   local pexe=$1
   local basename="${pexe%.*}"
   local arches="arm x86-32 x86-64"
+  if [ "${NACLPORTS_QUICKBUILD}" = "1" ]; then
+    arches="x86-64"
+  fi
+
   Banner "Translating ${pexe}"
 
   for a in ${arches} ; do
-    echo "translating pexe [${a}]"
+    echo "translating pexe -O0 [${a}]"
     nexe=${basename}.${a}.nexe
     if [ "${pexe}" -nt "${nexe}" ]; then
       "${TRANSLATOR}" -O0 -arch "${a}" "${pexe}" -o "${nexe}"
@@ -1491,13 +1557,15 @@ TranslatePexe() {
 
   # Now the same spiel with -O2
 
-  for a in ${arches} ; do
-    echo "translating pexe [${a}]"
-    nexe=${basename}.opt.${a}.nexe
-    if [ "${pexe}" -nt "${nexe}" ]; then
-      "${TRANSLATOR}" -O2 -arch "${a}" "${pexe}" -o "${nexe}"
-    fi
-  done
+  if [ "${NACLPORTS_QUICKBUILD}" != "1" ]; then
+    for a in ${arches} ; do
+      echo "translating pexe -O2 [${a}]"
+      nexe=${basename}.opt.${a}.nexe
+      if [ "${pexe}" -nt "${nexe}" ]; then
+        "${TRANSLATOR}" -O2 -arch "${a}" "${pexe}" -o "${nexe}"
+      fi
+    done
+  fi
 
   local dirname=$(dirname "${pexe}")
   ls -l "${dirname}"/*.nexe "${pexe}"
@@ -1545,7 +1613,7 @@ PackageStep() {
 
 ZipPublishDir() {
   # If something exists in the publish directory, zip it for download by mingn.
-  if [ "${NACLPORTS_QUICKBUILD:-}" = "1" ]; then
+  if [ "${NACLPORTS_QUICKBUILD}" = "1" ]; then
     return
   fi
   if [ -d "${PUBLISH_DIR}" ]; then
@@ -1657,7 +1725,7 @@ RunTestStep()       {
   if [ "${SKIP_SEL_LDR_TESTS}" = "1" ]; then
     return
   fi
-  if [ "${NACLPORTS_QUICKBUILD:-}" = "1" ]; then
+  if [ "${NACLPORTS_QUICKBUILD}" = "1" ]; then
     return
   fi
   RunStep TestStep "Testing" "${BUILD_DIR}"
@@ -1665,7 +1733,7 @@ RunTestStep()       {
 
 
 RunPostInstallTestStep()       {
-  if [ "${NACLPORTS_QUICKBUILD:-}" = "1" ]; then
+  if [ "${NACLPORTS_QUICKBUILD}" = "1" ]; then
     return
   fi
   RunStep PostInstallTestStep "Testing (post-install)"
