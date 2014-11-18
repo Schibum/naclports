@@ -1638,7 +1638,7 @@ DefaultPackageInstall() {
   RunConfigureStep
   RunBuildStep
   RunPostBuildStep
-  RunTestStep
+  # RunTestStep
   RunInstallStep
   RunPostInstallTestStep
   ZipPublishDir
