@@ -20,15 +20,15 @@ export BUILD_FLAGS
 
 # x86_64 NaCl
 NACL_ARCH=x86_64
-TOOLCHAIN=glibc
-make ${TARGETS}
+# TOOLCHAIN=glibc
+# make ${TARGETS}
 TOOLCHAIN=newlib
 make ${TARGETS}
 
 # i686 NaCl
 NACL_ARCH=i686
-TOOLCHAIN=glibc
-make ${TARGETS}
+# TOOLCHAIN=glibc
+# make ${TARGETS}
 TOOLCHAIN=newlib
 make ${TARGETS}
 
