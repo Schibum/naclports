@@ -33,7 +33,9 @@ ConfigureStep() {
     --target-os=linux \
     --disable-everything \
     --enable-muxer=webm \
+    --enable-demuxer=matroska \
     --enable-encoder=libvpx_vp8,libvorbis \
+    --enable-decoder=libvpx_vp8,libvorbis \
     --enable-filter="${FILTERS}" \
     --disable-yasm \
     --disable-asm \
