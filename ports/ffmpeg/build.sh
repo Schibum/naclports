@@ -25,6 +25,8 @@ ConfigureStep() {
   else
     extra_args="--arch=x86"
   fi
+  FILTERS="null,scale,resample,movie,amovie,crop,pad,apad,atrim,\
+    trim,sine,setpts,asetpts,volume,aevalsrc,aeval,aresample"
 
   LogExecute ${SRC_DIR}/configure \
     --cross-prefix=${NACL_CROSS_PREFIX}- \
@@ -32,7 +34,7 @@ ConfigureStep() {
     --disable-everything \
     --enable-muxer=webm \
     --enable-encoder=libvpx_vp8,libvorbis \
-    --enable-filter=null,scale,resample \
+    --enable-filter="${FILTERS}" \
     --disable-yasm \
     --disable-asm \
     --enable-static \
