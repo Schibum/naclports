@@ -54,7 +54,6 @@ from __future__ import print_function
 import argparse
 import json
 import os
-import subprocess
 import sys
 import urllib2
 
@@ -261,6 +260,7 @@ def LoadCanned(parts):
 def FixupCanned(partitions):
   all_projects = [p for p in naclports.source_package.SourcePackageIterator()]
   all_names = [p.NAME for p in all_projects if not p.DISABLED]
+  disabled_names = [p.NAME for p in all_projects if p.DISABLED]
 
   # Blank the last partition and fill it with anything not in the first two.
   partitions[-1] = []
@@ -279,7 +279,7 @@ def FixupCanned(partitions):
   # Check that all the items still exist.
   for i, partition in enumerate(partitions):
     for item in partition:
-      if item not in all_names:
+      if item not in all_names and item not in disabled_names:
         raise Error('non-existent package in partition %d: %s' % (i, item))
 
   # Check that partitions include all of their dependencies.
@@ -327,7 +327,7 @@ def main(args):
   parser.add_argument('--build-number', help='Builder number to look at for '
                       'historical data on build times.', type=int, default=-1)
   options = parser.parse_args(args)
-  naclports.verbose = options.verbose
+  naclports.SetVerbose(options.verbose)
 
   if options.check:
     for num_bots in xrange(1, 6):

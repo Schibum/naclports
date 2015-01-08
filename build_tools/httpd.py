@@ -33,24 +33,24 @@ class QuittableHTTPServer(SocketServer.ThreadingMixIn,
   pass
 
 
-def KeyValuePair(str, sep='='):
+def KeyValuePair(string, sep='='):
   """"Safely" split a string at |sep| into a [key, value] pair.
 
-  If |sep| does not exist in |str|, then the entire |str| is the key and the
-  value is set to an empty string."""
-  if sep in str:
-    return str.split(sep)
+  If |sep| does not exist in |string|, then the entire |string| is the key and
+  the value is set to an empty string."""
+  if sep in string:
+    return string.split(sep)
   else:
-    return [str, '']
+    return [string, '']
 
 
 class QuittableHTTPHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
   """A small handler that looks for '?quit=1' query in the path and shuts itself
   down if it finds that parameter."""
   def do_OPTIONS(self):
-    self.send_response(200, 'OK');
-    self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS, HEAD');
-    self.send_header('Access-Control-Allow-Headers', 'target');
+    self.send_response(200, 'OK')
+    self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS, HEAD')
+    self.send_header('Access-Control-Allow-Headers', 'target')
     self.end_headers()
 
   def do_GET(self):
@@ -78,7 +78,6 @@ class QuittableHTTPHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
         length = byte_end-byte_begin+1
         f = self.send_partial(byte_begin, length)
         if f:
-          curr_pos = f.tell()
           shutil.copyfileobj(f, self.wfile, length)
           f.seek(-byte_begin, os.SEEK_CUR)
           f.close()
@@ -121,7 +120,7 @@ class QuittableHTTPHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
       self.send_error(404, "File not found")
       return None
     fs = os.fstat(f.fileno())
-    if (offset + length > fs[6] or length < 0):
+    if offset + length > fs[6] or length < 0:
       self.send_error(416, 'Request range not satisfiable')
       return None
     self.send_response(206, 'Partial content')

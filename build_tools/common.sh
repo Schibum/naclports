@@ -11,7 +11,7 @@
 #
 # This file is source'd by the main naclports build script.  Functions
 # and variables defined here are available in the build script for
-# individual ports.  Only variables beginging with "NACL_" are intended
+# individual ports.  Only variables beginning with "NACL_" are intended
 # to be used by those scripts.
 
 set -o nounset
@@ -40,12 +40,6 @@ export NACLSTRINGS
 export NACLSTRIP
 export NACL_EXEEXT
 
-# When run by a buildbot force all archives to come from the NaCl mirror
-# rather than using upstream URL.
-if [ -n "${BUILDBOT_BUILDERNAME:-}" ]; then
-  FORCE_MIRROR=${FORCE_MIRROR:-"yes"}
-fi
-
 # sha1check python script
 readonly SHA1CHECK=${TOOLS_DIR}/sha1check.py
 
@@ -63,7 +57,7 @@ NACLPORTS_CFLAGS=""
 NACLPORTS_CXXFLAGS=""
 NACLPORTS_CPPFLAGS="${NACL_CPPFLAGS}"
 
-# For the library path we always explicly add to the link flags
+# For the library path we always explicitly add to the link flags
 # otherwise 'libtool' won't find the libraries correctly.  This
 # is because libtool uses 'gcc -print-search-dirs' which does
 # not honor the external specs file.
@@ -96,17 +90,6 @@ if [ "${NACL_LIBC}" = "glibc" -o "${NACL_LIBC}" = "bionic" ]; then
   NACL_SHARED=1
 else
   NACL_SHARED=0
-fi
-
-if [ "${NACL_DEBUG}" = "1" ]; then
-  NACLPORTS_CFLAGS+=" -g -O0"
-  NACLPORTS_CXXFLAGS+=" -g -O0"
-else
-  NACLPORTS_CFLAGS+=" -O2"
-  NACLPORTS_CXXFLAGS+=" -O2"
-  if [ "${NACL_ARCH}" = "pnacl" ]; then
-    NACLPORTS_LDFLAGS+=" -O2"
-  fi
 fi
 
 # libcli_main.a has a circular dependency which makes static link fail
@@ -152,10 +135,9 @@ NACL_BUILD_SUBDIR+=${PACKAGE_SUFFIX}
 NACL_INSTALL_SUBDIR+=${PACKAGE_SUFFIX}
 readonly DEST_PYTHON_OBJS=${NACL_PACKAGES_BUILD}/python-modules/${NACL_BUILD_SUBDIR}
 PACKAGE_FILE=${NACL_PACKAGES_ROOT}/${NAME}_${VERSION}${PACKAGE_SUFFIX}.tar.bz2
-PATCH_FILE=${START_DIR}/nacl.patch
 
 # Don't support building with SDKs older than the current stable release
-MIN_SDK_VERSION=${MIN_SDK_VERSION:-37}
+MIN_SDK_VERSION=${MIN_SDK_VERSION:-40}
 NACLPORTS_QUICKBUILD=${NACLPORTS_QUICKBUILD:-0}
 
 if [ "${OS_NAME}" = "Darwin" ]; then
@@ -189,8 +171,8 @@ if [ -n "${NACL_GOMA:-}" ]; then
       NACLCC="gomacc ${NACLCC}"
       NACLCXX="gomacc ${NACLCXX}"
       # There is a bug in goma right now where the i686 compiler wrapper script
-      # is not correcly handled and gets confiused with the x86_64 version.
-      # We need to pass a redunant -m32, to force it to compiler for i686.
+      # is not correctly handled and gets confused with the x86_64 version.
+      # We need to pass a redundant -m32, to force it to compiler for i686.
       if [ "${NACL_ARCH}" = "i686" ]; then
         NACLPORTS_CFLAGS+=" -m32"
         NACLPORTS_CXXFLAGS+=" -m32"
@@ -217,6 +199,8 @@ SRC_DIR=${WORK_DIR}/${ARCHIVE_ROOT}
 DEFAULT_BUILD_DIR=${WORK_DIR}/${NACL_BUILD_SUBDIR}
 BUILD_DIR=${NACL_BUILD_DIR:-${DEFAULT_BUILD_DIR}}
 INSTALL_DIR=${WORK_DIR}/${NACL_INSTALL_SUBDIR}
+NACL_CONFIGURE_PATH=${NACL_CONFIGURE_PATH:-${SRC_DIR}/configure}
+
 
 # DESTDIR is where the headers, libraries, etc. will be installed
 # Default to the usr folder within the SDK.
@@ -292,10 +276,12 @@ InstallConfigSite() {
 }
 
 
+#
 # When configure checks for system headers is doesn't pass CFLAGS
 # to the compiler.  This means that any includes that live in paths added
 # with -I are not found.  Here we push the additional newlib headers
 # into the toolchain itself from ${NACL_SDK_ROOT}/include/<toolchain>.
+#
 InjectSystemHeaders() {
   local TC_INCLUDES=${NACL_SDK_ROOT}/include/${TOOLCHAIN}
   if [ ! -d "${TC_INCLUDES}" ]; then
@@ -322,7 +308,7 @@ PatchSpecsFile() {
   if [ "${NACL_ARCH}" = "pnacl" -o \
        "${NACL_ARCH}" = "emscripten" ]; then
     # The emscripten and PNaCl toolchains already include the required
-    # include and library paths by defaut. No need to patch them.
+    # include and library paths by default. No need to patch them.
     return
   fi
 
@@ -355,7 +341,7 @@ PatchSpecsFile() {
   local SED_SAFE_SPACES_USR_LIB=${NACL_SDK_MULTIARCH_USR_LIB/ /\ /}
 
   if [ -f ${SPECS_FILE} ]; then
-    if grep -q "${NACL_SDK_MULTIARCH_USR_LIB}" ${SPECS_FILE}; then
+    if grep -q nacl_arch ${SPECS_FILE}; then
       echo "Specs file already patched"
       return
     fi
@@ -396,13 +382,11 @@ PatchSpecsFile() {
 
 
 CheckSDKVersion() {
-  if [ -z "${MIN_SDK_VERSION:-}" ]; then
-    return
-  fi
   local GETOS=${NACL_SDK_ROOT}/tools/getos.py
   local RESULT=$("${GETOS}" --check-version="${MIN_SDK_VERSION}" 2>&1)
   if [ -n "${RESULT:-}" ]; then
     echo "The SDK in \$NACL_SDK_ROOT is too old to build ${PACKAGE_NAME}."
+    echo "Please update your SDK, or use the pepper_XX naclports branches."
     echo "${RESULT}"
     exit -1
   fi
@@ -420,14 +404,16 @@ Banner() {
 }
 
 
+#
 # echo a command to stdout and then execute it.
+#
 LogExecute() {
   echo "$@"
   "$@"
 }
 
 
-# Set the ARCHIVE_NAME variable to the nacl of the upstream
+# Set the ARCHIVE_NAME variable to the name of the upstream
 # tarball.  If ${URL} is not define (when there is no upstream)
 # then leave ARCHIVE_NAME unset.
 ArchiveName() {
@@ -437,21 +423,76 @@ ArchiveName() {
 }
 
 
-# Is this a git repo?
+#
+# Return 0 if the current port's URL points to a git repo, 1 otherwise.
+#
 IsGitRepo() {
   if [ -z "${URL:-}" ]; then
-    return 1;
+    return 1
   fi
 
   local GIT_URL=${URL%@*}
 
   if [[ "${#GIT_URL}" -ge "4" ]] && [[ "${GIT_URL:(-4)}" == ".git" ]]; then
-    return 0;
+    return 0
   else
-    return 1;
+    return 1
   fi
 }
 
+
+#
+# Return 0 if the current port is autoconf-based, 1 otherwise.
+# This must be called after the source archive is expanded
+# as it inspects the contents of ${SRC_DIR}
+#
+IsAutoconfProject() {
+  if [ -f "${NACL_CONFIGURE_PATH}" ]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+
+#
+# Return 0 if the current port is cmake-based, 1 otherwise.
+# This must be called after the source archive is expanded
+# as it inspects the contents of ${current}
+#
+IsCMakeProject() {
+  if IsAutoconfProject; then
+    return 1
+  fi
+  if [ -f "${SRC_DIR}/CMakeLists.txt" ]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+
+#
+# Add optimization flags for either debug or release configuration.
+# This is not done for cmake-based projects as cmake adds these
+# internally.
+#
+SetOptFlags() {
+  if IsCMakeProject; then
+    return
+  fi
+
+  if [ "${NACL_DEBUG}" = "1" ]; then
+    NACLPORTS_CFLAGS+=" -g -O0"
+    NACLPORTS_CXXFLAGS+=" -g -O0"
+  else
+    NACLPORTS_CFLAGS+=" -DNDEBUG -O2"
+    NACLPORTS_CXXFLAGS+=" -DNDEBUG -O2"
+    if [ "${NACL_ARCH}" = "pnacl" ]; then
+      NACLPORTS_LDFLAGS+=" -DNDEBUG -O2"
+    fi
+  fi
+}
 
 #
 # Attempt to download a file from a given URL
@@ -522,92 +563,6 @@ Check() {
 }
 
 
-DefaultDownloadStep() {
-  if [ -z "${ARCHIVE_NAME:-}" ]; then
-    return
-  fi
-
-  cd "${NACL_PACKAGES_CACHE}"
-  # if matching tarball already exists, don't download again
-  if ! Check ; then
-    Fetch "${URL}" "${ARCHIVE_NAME}"
-    if ! Check ; then
-       Banner "${PACKAGE_NAME} failed checksum!"
-       exit -1
-    fi
-  fi
-}
-
-
-GitCloneStep() {
-  local stamp_content="GITURL=${URL}"
-  if [ -f "${PATCH_FILE}" ]; then
-    local patch_checksum=$(${TOOLS_DIR}/sha1sum.py "${PATCH_FILE}")
-    stamp_content+=" PATCH_${patch_checksum}"
-  fi
-
-  if [ -d "${SRC_DIR}" ]; then
-    if CheckStampContent clone "${stamp_content}" ; then
-      Banner "Skipping git clone step"
-      return
-    fi
-
-    echo "error: Upstream archive or patch has changed."
-    echo "Please remove existing checkout to continue: '${SRC_DIR}'"
-    exit 1
-  fi
-
-  local GIT_URL=${URL%@*}
-  local COMMIT=${URL#*@}
-
-  # Clone upstream git repo into local mirror, or update the existing
-  # mirror.
-  local GIT_MIRROR=${GIT_URL##*://}
-  GIT_MIRROR=${GIT_MIRROR//\//_}
-  cd "${NACL_PACKAGES_CACHE}"
-  if [ -e "${GIT_MIRROR}" ]; then
-    cd "${GIT_MIRROR}"
-    if git rev-parse "${COMMIT}" > /dev/null 2>&1; then
-      echo "git mirror up-to-date: ${GIT_MIRROR}"
-    else
-      echo "Updating git mirror: ${GIT_MIRROR}"
-      LogExecute git remote update --prune
-    fi
-    cd "${NACL_PACKAGES_CACHE}"
-  else
-    LogExecute git clone --mirror "${GIT_URL}" "${GIT_MIRROR}"
-  fi
-
-  # Clone from the local mirror.
-  LogExecute git clone "${GIT_MIRROR}" "${SRC_DIR}"
-  ChangeDir "${SRC_DIR}"
-  LogExecute git reset --hard "${COMMIT}"
-
-  # Set the origing to the original URL so it is possible to push directly
-  # from the build tree.
-  git remote set-url origin "${GIT_URL}"
-
-  WriteStamp clone "${stamp_content}"
-
-  # make sure the patch step is applied
-  Remove "${NACL_PACKAGES_STAMPDIR}/${PACKAGE_NAME}/patch"
-}
-
-
-#
-# Apply the package's patch file in the current working directory
-#
-Patch() {
-  if [ -f "${PATCH_FILE}" ]; then
-    Banner "Patching $(basename ${PWD})"
-    #git apply ${PATCH_FILE}
-    patch -p1 -g0 --no-backup-if-mismatch < "${PATCH_FILE}"
-    git add .
-    git commit -m "Apply naclports patch"
-  fi
-}
-
-
 VerifyPath() {
   # make sure path isn't all slashes (possibly from an unset variable)
   local PATH=$1
@@ -654,7 +609,7 @@ MakeDir() {
 }
 
 
-DefaultPreInstallStep() {
+MakeDirs() {
   MakeDir "${NACL_PACKAGES_ROOT}"
   MakeDir "${NACL_PACKAGES_BUILD}"
   # If 'tarballs' directory exists then rename it to the new name: 'cache'.
@@ -692,7 +647,8 @@ PublishByArchForDevEnv() {
     # TODO(bradnelson): Do something prettier.
     if [[ "$(head -c 2 ${nexe})" != "#!" && \
           "$(head -c 2 ${nexe})" != "# " && \
-          "${nexe}" != *.txt ]]; then
+          "${nexe}" != *.txt && \
+          "${nexe}" != config.status ]]; then
       # Strip non-scripts
       LogExecute "${NACLSTRIP}" "${ARCH_DIR}/${name}"
 
@@ -717,45 +673,10 @@ PublishByArchForDevEnv() {
 }
 
 
-InitGitRepo() {
-  if [ -d .git ]; then
-    local PREEXISTING_REPO=1
-  else
-    local PREEXISTING_REPO=0
-  fi
-
-  if [ ${PREEXISTING_REPO} = 0 ]; then
-    LogExecute git init
-  fi
-
-  # Setup git username and email in case there is not a system
-  # wide one already (git will error out on commit if it is missing).
-  if [ -n "${BUILDBOT_BUILDERNAME:-}" ]; then
-    if [ -z "$(git config user.email)" ]; then
-      git config user.email "naclports_buildbot"
-    fi
-    if [ -z "$(git config user.name)" ]; then
-      git config user.name "naclports buildbot"
-    fi
-  fi
-
-  # Ensure that the repo has an upstream and a master branch properly set up.
-  if [ ${PREEXISTING_REPO} = 1 ]; then
-    git checkout -b placeholder
-    git show-ref refs/heads/upstream > /dev/null && git branch -D upstream
-    git checkout -b upstream
-    git show-ref refs/heads/master > /dev/null && git branch -D master
-    git checkout -b master
-    git branch -D placeholder
-  else
-    git add -f .
-    git commit -m "Upstream version" > /dev/null
-    git checkout -b upstream
-    git checkout master
-  fi
-}
-
-
+#
+# CheckStamp: checks for the existence of a stamp file
+# $1 - Name of stamp file.
+#
 CheckStamp() {
   local STAMP_DIR="${NACL_PACKAGES_STAMPDIR}/${PACKAGE_NAME}"
   local STAMP_FILE="${STAMP_DIR}/$1"
@@ -763,13 +684,6 @@ CheckStamp() {
   if [ ! -f "${STAMP_FILE}" ]; then
     return 1
   fi
-  shift
-  while (( "$#" )) ; do
-    if [ "$1" -nt "${STAMP_FILE}" ]; then
-      return 1
-    fi
-    shift
-  done
   return 0
 }
 
@@ -778,38 +692,6 @@ TouchStamp() {
   local STAMP_DIR=${NACL_PACKAGES_STAMPDIR}/${PACKAGE_NAME}
   MakeDir "${STAMP_DIR}"
   touch "${STAMP_DIR}/$1"
-}
-
-
-#
-# CheckStampContent: checks that a stampfile exists an has a specified contents.
-#
-# $1 - Name of stamp file.
-# $2 - Expected contents of stamp file.
-#
-CheckStampContent() {
-  local STAMP_DIR="${NACL_PACKAGES_STAMPDIR}/${PACKAGE_NAME}"
-  local STAMP_FILE="${STAMP_DIR}/$1"
-
-  # check the stamp file exists
-  if [ ! -f "${STAMP_FILE}" ]; then
-    return 1
-  fi
-
-  # check the stamp contents
-  local stamp_contents=$(cat "${STAMP_FILE}")
-  if [ ! "${stamp_contents}" = "$2" ]; then
-    return 1
-  fi
-
-  return 0
-}
-
-
-WriteStamp() {
-  local STAMP_DIR=${NACL_PACKAGES_STAMPDIR}/${PACKAGE_NAME}
-  MakeDir "${STAMP_DIR}"
-  echo "$2" > "${STAMP_DIR}/$1"
 }
 
 
@@ -1020,53 +902,6 @@ FixupExecutablesList() {
 ######################################################################
 # Build Steps
 ######################################################################
-DefaultExtractStep() {
-  if [ -z "${ARCHIVE_NAME:-}" ]; then
-    return
-  fi
-
-  local stamp_content="ARCHIVE_SHA1=${SHA1}"
-  if [ -f "${PATCH_FILE}" ]; then
-    local patch_checksum=$(${TOOLS_DIR}/sha1sum.py ${PATCH_FILE})
-    stamp_content+=" PATCH_${patch_checksum}"
-  fi
-
-  if [ -d "${SRC_DIR}" ]; then
-    if CheckStampContent extract "${stamp_content}" ; then
-      Banner "Skipping extract step"
-      return
-    fi
-  fi
-
-  Banner "Extracting ${ARCHIVE_NAME}"
-  if [ -d "${SRC_DIR}" ]; then
-    echo "error: Upstream archive or patch has changed."
-    echo "Please remove existing workspace to continue: '${SRC_DIR}'"
-    exit 1
-  fi
-  Remove "${SRC_DIR}"
-
-  # make sure the patch step is applied
-  Remove "${NACL_PACKAGES_STAMPDIR}/${PACKAGE_NAME}/patch"
-  local EXTENSION="${ARCHIVE_NAME##*.}"
-  PARENT_DIR=$(dirname ${SRC_DIR})
-  MakeDir "${PARENT_DIR}"
-  ChangeDir "${PARENT_DIR}"
-  local ARCHIVE="${NACL_PACKAGES_CACHE}/${ARCHIVE_NAME}"
-  if [ "${EXTENSION}" = "zip" ]; then
-    LogExecute unzip -q "${ARCHIVE}"
-  else
-    if [ "${OS_SUBDIR}" = "win" ]; then
-      LogExecute tar --no-same-owner -xf "${ARCHIVE}"
-    else
-      LogExecute tar xf "${ARCHIVE}"
-    fi
-  fi
-
-  MakeDir "${BUILD_DIR}"
-  WriteStamp extract "${stamp_content}"
-}
-
 
 PatchConfigSub() {
   # Replace the package's config.sub one with an up-do-date copy
@@ -1097,6 +932,11 @@ PatchConfigure() {
 
 
 DefaultPatchStep() {
+  # The applicaiton of the nacl.patch file is now done by
+  # naclports python code.
+  # TODO(sbc): migrate auto patching of config sub and configure
+  # and remove this function.
+
   if [ -z "${ARCHIVE_NAME:-}" ] && ! IsGitRepo; then
     return
   fi
@@ -1104,13 +944,9 @@ DefaultPatchStep() {
   ChangeDir "${SRC_DIR}"
 
   if CheckStamp patch ; then
-    Banner "Skipping patch step (cleaning source tree)"
-    git clean -f -d
     return
   fi
 
-  InitGitRepo
-  Patch "${PATCH_FILE}"
   PatchConfigure
   PatchConfigSub
   if [ -n "$(git diff --no-ext-diff)" ]; then
@@ -1123,8 +959,6 @@ DefaultPatchStep() {
 
 
 DefaultConfigureStep() {
-  local CONFIGURE=${NACL_CONFIGURE_PATH:-${SRC_DIR}/configure}
-
   if [ "${NACLPORTS_QUICKBUILD}" = "1" ]; then
     CONFIGURE_SENTINEL=${CONFIGURE_SENTINEL:-Makefile}
   fi
@@ -1133,9 +967,9 @@ DefaultConfigureStep() {
     return
   fi
 
-  if [ -f "${CONFIGURE}" ]; then
-    ConfigureStep_Autotools
-  elif [ -f "${SRC_DIR}/CMakeLists.txt" ]; then
+  if IsAutoconfProject; then
+    ConfigureStep_Autoconf
+  elif IsCMakeProject; then
     ConfigureStep_CMake
   else
     echo "No configure or CMakeLists.txt script found in ${SRC_DIR}"
@@ -1143,12 +977,11 @@ DefaultConfigureStep() {
 }
 
 
-ConfigureStep_Autotools() {
+ConfigureStep_Autoconf() {
   conf_build=$(/bin/sh "${SCRIPT_DIR}/config.guess")
 
   SetupCrossEnvironment
 
-  local CONFIGURE=${NACL_CONFIGURE_PATH:-${SRC_DIR}/configure}
   local conf_host=${NACL_CROSS_PREFIX}
   if [ "${NACL_ARCH}" = "pnacl" -o "${NACL_ARCH}" = "emscripten" ]; then
     # The PNaCl tools use "pnacl-" as the prefix, but config.sub
@@ -1169,7 +1002,7 @@ ConfigureStep_Autotools() {
   # For example a trivial PNaCl binary can sometimes run on the linux host if
   # it has the correct LLVM bimfmt support. What is more, autoconf will
   # generate a warning if only --host is specified.
-  LogExecute "${CONFIGURE}" \
+  LogExecute "${NACL_CONFIGURE_PATH}" \
     --build=${conf_build} \
     --host=${conf_host} \
     --prefix=${PREFIX} \
@@ -1572,6 +1405,22 @@ TranslatePexe() {
 }
 
 
+#
+# Create a zip file for uploading to the chrome web store.
+# $1 - zipfile to create
+# $2 - directory to zip
+#
+CreateWebStoreZip() {
+  if [ "${NACLPORTS_QUICKBUILD}" = "1" ]; then
+    echo "Skipping Web Store package create: $1"
+    return
+  fi
+  Banner "Creating Web Store package: $1"
+  Remove $1
+  LogExecute zip -r $1 $2/
+}
+
+
 PackageStep() {
   local basename=$(basename "${PACKAGE_FILE}")
   Banner "Packaging ${basename}"
@@ -1616,24 +1465,26 @@ ZipPublishDir() {
   if [ "${NACLPORTS_QUICKBUILD}" = "1" ]; then
     return
   fi
-  if [ -d "${PUBLISH_DIR}" ]; then
-    # Remove existing zip as it may contain only some architectures.
-    LogExecute rm -f "${PUBLISH_DIR}.zip"
-    pushd "${PUBLISH_DIR}"
-    LogExecute zip -rq "${PUBLISH_DIR}.zip" ./
-    popd
+
+  if [ ! -d "${PUBLISH_DIR}" ]; then
+    return
   fi
+
+  # If an arch specfic zip already exists (e.g. from PublishByArchForDevEnv)
+  # then skip supping the whole publish dir
+  if [ -f "${PUBLISH_DIR}/${NACL_ARCH}.zip" ]; then
+    return
+  fi
+
+  # Remove existing zip as it may contain only some architectures.
+  Remove "${PUBLISH_DIR}.zip"
+  ChangeDir "${PUBLISH_DIR}"
+  LogExecute zip -rq "${PUBLISH_DIR}.zip" ./
 }
 
 
-DefaultPackageInstall() {
-  RunPreInstallStep
-  if IsGitRepo; then
-    RunGitCloneStep
-  else
-    RunDownloadStep
-    RunExtractStep
-  fi
+PackageInstall() {
+  RunDownloadStep
   RunPatchStep
   RunConfigureStep
   RunBuildStep
@@ -1686,9 +1537,7 @@ RunStep() {
 
 # Function entry points that packages should override in order
 # to customize the build process.
-PreInstallStep()      { DefaultPreInstallStep;      }
-DownloadStep()        { DefaultDownloadStep;        }
-ExtractStep()         { DefaultExtractStep;         }
+DownloadStep()        { return;                     }
 PatchStep()           { DefaultPatchStep;           }
 ConfigureStep()       { DefaultConfigureStep;       }
 BuildStep()           { DefaultBuildStep;           }
@@ -1696,16 +1545,13 @@ PostBuildStep()       { DefaultPostBuildStep;       }
 TestStep()            { DefaultTestStep;            }
 InstallStep()         { DefaultInstallStep;         }
 PostInstallTestStep() { DefaultPostInstallTestStep; }
-PackageInstall()      { DefaultPackageInstall;      }
 
-RunPreInstallStep() { RunStep PreInstallStep; }
 RunDownloadStep()   { RunStep DownloadStep; }
-RunGitCloneStep()   { RunStep GitCloneStep; }
-RunExtractStep()    { RunStep ExtractStep; }
 RunPatchStep()      { RunStep PatchStep; }
 
 
 RunConfigureStep()  {
+  SetOptFlags
   RunStep ConfigureStep "Configuring" "${BUILD_DIR}"
 }
 
@@ -1759,3 +1605,4 @@ PatchSpecsFile
 InjectSystemHeaders
 InstallConfigSite
 GetRevision
+MakeDirs

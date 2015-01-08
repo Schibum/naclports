@@ -108,7 +108,7 @@ InstallStep() {
   fi
 
   ChangeDir ${PUBLISH_DIR}
-  LogExecute zip -r scummvm-1.2.1.zip scummvm
+  CreateWebStoreZip scummvm-${VERSION}.zip scummvm
 }
 
 CustomCheck() {
@@ -149,7 +149,6 @@ GameGetStep() {
 }
 
 DownloadStep() {
-  DefaultDownloadStep
   GameGetStep ${BASS_FLOPPY_URL} ${BASS_FLOPPY_NAME}
   GameGetStep ${LURE_URL} ${LURE_NAME}
 }

@@ -6,21 +6,27 @@
 
 // Include quoted spawn.h first so we can build in the presence of an installed
 // copy of nacl-spawn.
+#define IN_NACL_SPAWN_CC
 #include "spawn.h"
 
 #include "nacl_main.h"
 
-#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <libgen.h>
 #include <limits.h>
+#include <irt.h>
+#include <irt_dev.h>
 #include <netinet/in.h>
+#include <setjmp.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -37,6 +43,7 @@
 #include "library_dependencies.h"
 #include "path_util.h"
 
+
 extern char** environ;
 extern int nacl_spawn_pid;
 extern int nacl_spawn_ppid;
@@ -49,15 +56,11 @@ struct NaClSpawnReply {
 };
 
 static std::string GetCwd() {
-  char cwd[PATH_MAX + 1];
-  // TODO(hamaji): Remove this #if and always call getcwd.
-  // https://code.google.com/p/naclports/issues/detail?id=109
-#if defined(__GLIBC__)
-  if (!getwd(cwd))
-#else
-  if (!getcwd(cwd, PATH_MAX))
-#endif
+  char cwd[PATH_MAX] = ".";
+  if (!getcwd(cwd, PATH_MAX)) {
+    NACL_LOG("getcwd failed: %s\n", strerror(errno));
     assert(0);
+  }
   return cwd;
 }
 
@@ -283,7 +286,6 @@ static bool ExpandShBang(std::string* prog, pp::VarDictionary* req) {
 
 static bool UseBuiltInFallback(std::string* prog, pp::VarDictionary* req) {
   if (prog->find('/') == std::string::npos) {
-    bool found = false;
     const char* path_env = getenv("PATH");
     std::vector<std::string> paths;
     GetPaths(path_env, &paths);
@@ -372,6 +374,55 @@ static int GetInt(pp::VarDictionary dict, const char* key) {
 
 static pid_t waitpid_impl(int pid, int* status, int options);
 
+// TODO(bradnelson): Add sysconf means to query this in all libc's.
+#define MAX_FILE_DESCRIPTOR 1000
+
+static int CloneFileDescriptors(pp::VarArray* envs) {
+  int fd;
+  int port;
+
+  for (fd = 0; fd < MAX_FILE_DESCRIPTOR; ++fd) {
+    struct stat st;
+    if (fstat(fd, &st) < 0) {
+      if (errno == EBADF) {
+        continue;
+      }
+      return -1;
+    }
+    port = -1;
+    if (S_ISREG(st.st_mode)) {
+      // TODO(bradnelson): Land nacl_io ioctl to support this.
+    } else if (S_ISDIR(st.st_mode)) {
+      // TODO(bradnelson): Land nacl_io ioctl to support this.
+    } else if (S_ISCHR(st.st_mode)) {
+      // Unsupported.
+    } else if (S_ISBLK(st.st_mode)) {
+      // Unsupported.
+    } else if (S_ISFIFO(st.st_mode)) {
+      // TODO(bradnelson): Support this once named pipe change lands.
+    } else if (S_ISLNK(st.st_mode)) {
+      // Unsupported.
+    } else if (S_ISSOCK(st.st_mode)) {
+      struct sockaddr_in addr;
+      socklen_t addr_len = sizeof addr;
+      if (getsockname(fd, (struct sockaddr *) &addr, &addr_len) < 0) {
+        return -1;
+      }
+      port = ntohs(addr.sin_port);
+      // TODO(bradnelson): Handle host + non-pipes.
+      char entry[100];
+      snprintf(entry, sizeof entry,
+          "NACL_SPAWN_FD_PIPE_SOCKET=%d:%d", fd, port);
+      envs->Set(envs->GetLength(), entry);
+    }
+  }
+  return 0;
+}
+
+NACL_SPAWN_TLS jmp_buf nacl_spawn_vfork_env;
+static NACL_SPAWN_TLS pid_t vfork_pid = -1;
+static NACL_SPAWN_TLS int vforking = 0;
+
 // Shared spawnve implementation. Declared static so that shared library
 // overrides doesn't break calls meant to be internal to this implementation.
 static int spawnve_impl(int mode, const char* path,
@@ -394,6 +445,10 @@ static int spawnve_impl(int mode, const char* path,
   } else if (mode == P_NOWAIT || mode == P_NOWAITO) {
     // The normal case.
   } else if (mode == P_OVERLAY) {
+    if (vforking) {
+      vfork_pid = spawnve_impl(P_NOWAIT, path, argv, envp);
+      longjmp(nacl_spawn_vfork_env, 1);
+    }
     // TODO(bradnelson): Add this by allowing javascript to replace the
     // existing module with a new one.
     errno = ENOSYS;
@@ -405,6 +460,13 @@ static int spawnve_impl(int mode, const char* path,
   if (NULL == envp) {
     envp = environ;
   }
+
+  PSInstance* instance = PSInstance::GetInstance();
+  if (!instance) {
+    errno = ENOSYS;
+    return -1;
+  }
+
   pp::VarDictionary req;
   req.Set("command", "nacl_spawn");
   pp::VarArray args;
@@ -414,6 +476,9 @@ static int spawnve_impl(int mode, const char* path,
   pp::VarArray envs;
   for (int i = 0; envp[i]; i++)
     envs.Set(i, envp[i]);
+  if (CloneFileDescriptors(&envs) < 0) {
+    return -1;
+  }
   req.Set("envs", envs);
   req.Set("cwd", GetCwd());
 
@@ -496,10 +561,44 @@ pid_t wait4(pid_t pid, void* status, int options,
   return waitpid_impl(pid, static_cast<int*>(status), options);
 }
 
+/*
+ * Fake version of getpid().  This is used if there is no
+ * nacl_spawn_ppid set and no IRT getpid interface available.
+ */
+static int getpid_fake(int* pid) {
+  *pid = 1;
+  return 0;
+}
+
+static struct nacl_irt_dev_getpid irt_dev_getpid;
+
+/*
+ * IRT version of getpid().  This is used if there is no
+ * nacl_spawn_ppid set.
+ */
+static pid_t getpid_irt() {
+  if (irt_dev_getpid.getpid == NULL) {
+    int res = nacl_interface_query(NACL_IRT_DEV_GETPID_v0_1,
+                                   &irt_dev_getpid,
+                                   sizeof(irt_dev_getpid));
+    if (res != sizeof(irt_dev_getpid)) {
+      irt_dev_getpid.getpid = getpid_fake;
+    }
+  }
+
+  int pid;
+  int error = irt_dev_getpid.getpid(&pid);
+  if (error != 0) {
+    errno = error;
+    return -1;
+  }
+  return pid;
+}
+
 // Get the process ID of the calling process.
 pid_t getpid() {
   if (nacl_spawn_pid == -1) {
-    errno = ENOSYS;
+    return getpid_irt();
   }
   return nacl_spawn_pid;
 }
@@ -628,6 +727,10 @@ static int TCPConnectToLocalhost(int port) {
 // Create a pipe. pipefd[0] will be the read end of the pipe and pipefd[1] the
 // write end of the pipe.
 int pipe(int pipefd[2]) {
+  PSInstance* instance = PSInstance::GetInstance();
+  if (!instance)
+    return ENOSYS;
+
   pp::VarDictionary req, result;
   int readPort, writePort, readSocket, writeSocket;
 
@@ -660,6 +763,103 @@ int pipe(int pipefd[2]) {
   pipefd[1] = writeSocket;
 
   return 0;
+}
+
+void nacl_spawn_vfork_before(void) {
+  assert(!vforking);
+  vforking = 1;
+}
+
+pid_t nacl_spawn_vfork_after(int jmping) {
+  if (jmping) {
+    vforking = 0;
+    return vfork_pid;
+  }
+  return 0;
+}
+
+void nacl_spawn_vfork_exit(int status) {
+  if (vforking) {
+    pp::VarDictionary req;
+    req.Set("command", "nacl_deadpid");
+    req.Set("status", status);
+    int result = GetInt(SendRequest(&req), "pid");
+    if (result < 0) {
+      errno = -result;
+      vfork_pid = -1;
+    } else {
+      vfork_pid = result;
+    }
+    longjmp(nacl_spawn_vfork_env, 1);
+  } else {
+    _exit(status);
+  }
+}
+
+#define VARG_TO_ARGV_START \
+  va_list vl; \
+  va_start(vl, arg); \
+  va_list vl_count; \
+  va_copy(vl_count, vl); \
+  int count = 1; \
+  while (va_arg(vl_count, char*)) { \
+    ++count; \
+  } \
+  va_end(vl_count); \
+  /* Copying all the args into argv plus a trailing NULL */ \
+  char** argv = static_cast<char**>(alloca(sizeof(char *) * (count + 1))); \
+  argv[0] = const_cast<char*>(arg); \
+  for (int i = 1; i <= count; i++) { \
+    argv[i] = va_arg(vl, char*); \
+  }
+
+#define VARG_TO_ARGV \
+  VARG_TO_ARGV_START; \
+  va_end(vl);
+
+#define VARG_TO_ARGV_ENVP \
+  VARG_TO_ARGV_START; \
+  char* const* envp = va_arg(vl, char* const*); \
+  va_end(vl);
+
+int execve(const char *filename, char *const argv[], char *const envp[]) {
+  return spawnve_impl(P_OVERLAY, filename, argv, envp);
+}
+
+int execv(const char *path, char *const argv[]) {
+  return spawnve_impl(P_OVERLAY, path, argv, environ);
+}
+
+int execvp(const char *file, char *const argv[]) {
+  // TODO(bradnelson): Limit path resolution to 'p' variants.
+  return spawnve_impl(P_OVERLAY, file, argv, environ);
+}
+
+int execvpe(const char *file, char *const argv[], char *const envp[]) {
+  // TODO(bradnelson): Limit path resolution to 'p' variants.
+  return spawnve_impl(P_OVERLAY, file, argv, envp);
+}
+
+int execl(const char *path, const char *arg, ...) {
+  VARG_TO_ARGV;
+  return spawnve_impl(P_OVERLAY, path, argv, environ);
+}
+
+int execlp(const char *file, const char *arg, ...) {
+  VARG_TO_ARGV;
+  // TODO(bradnelson): Limit path resolution to 'p' variants.
+  return spawnve_impl(P_OVERLAY, file, argv, environ);
+}
+
+int execle(const char *path, const char *arg, ...) {  /* char* const envp[] */
+  VARG_TO_ARGV_ENVP;
+  return spawnve_impl(P_OVERLAY, path, argv, envp);
+}
+
+int execlpe(const char *path, const char *arg, ...) {  /* char* const envp[] */
+  VARG_TO_ARGV_ENVP;
+  // TODO(bradnelson): Limit path resolution to 'p' variants.
+  return spawnve_impl(P_OVERLAY, path, argv, envp);
 }
 
 };  // extern "C"

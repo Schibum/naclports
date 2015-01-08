@@ -31,7 +31,7 @@ from naclports import Log, Trace
 
 def FormatSize(num_bytes):
   """Create a human readable string from a byte count."""
-  for x in ['bytes','KB','MB','GB','TB']:
+  for x in ('bytes', 'KB', 'MB', 'GB', 'TB'):
     if num_bytes < 1024.0:
       return "%3.1f %s" % (num_bytes, x)
     num_bytes /= 1024.0
@@ -52,7 +52,7 @@ def ParseGsUtilLs(output):
   for line in output.splitlines():
     if line.startswith("TOTAL"):
       continue
-    size, data, filename, etag = line.split()
+    size, _, filename, etag = line.split()
     etag = etag.split('=', 1)[1]
     filename = filename[len('gs://'):]
     url = naclports.GS_URL + filename
@@ -124,7 +124,7 @@ def main(args):
                       help='Assume on-disk files are up-to-date (for testing).')
   args = parser.parse_args(args)
   if args.verbose:
-    naclports.verbose = True
+    naclports.SetVerbose(True)
 
   sdk_version = naclports.GetSDKVersion()
   Log('Scanning packages built for pepper_%s at revsion %s' %

@@ -78,6 +78,15 @@ diff --git a/configure b/configure
        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for style of pending output formalism" >&5
  $as_echo_n "checking for style of pending output formalism... " >&6; }
                    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+@@ -15929,7 +15935,7 @@ if ${emacs_cv_usable_FIONREAD+:} false; then :
+   $as_echo_n "(cached) " >&6
+ else
+   case $opsys in
+-     aix4-2)
++     aix4-2 | nacl)
+               emacs_cv_usable_FIONREAD=no
+        ;;
+ 
 @@ -24659,7 +24665,7 @@ LD_FIRSTFLAG=
  ORDINARY_LINK=
  case "$opsys" in
@@ -95,7 +104,7 @@ diff --git a/leim/Makefile.in b/leim/Makefile.in
  # Which Emacs to use to convert TIT files to Emacs Lisp files,
  # byte-compile Emacs Lisp files, and generate the file leim-list.el.
 -EMACS = ../src/emacs
-+EMACS = ../src/emacs.nexe
++EMACS = ../src/emacs${EXEEXT}
  
  buildlisppath=${srcdir}/../lisp
  
@@ -142,7 +151,7 @@ diff --git a/lib-src/Makefile.in b/lib-src/Makefile.in
  
  ../lib/libgnu.a: $(config_h)
  	cd ../lib && $(MAKE) libgnu.a
-@@ -303,30 +304,32 @@ regex.o: $(srcdir)/../src/regex.c $(srcdir)/../src/regex.h $(config_h)
+@@ -303,30 +304,30 @@ regex.o: $(srcdir)/../src/regex.c $(srcdir)/../src/regex.h $(config_h)
  etags${EXEEXT}: ${srcdir}/etags.c regex.o $(config_h)
  	$(CC) ${ALL_CFLAGS} -DEMACS_NAME="\"GNU Emacs\"" \
  	  -DVERSION="\"${version}\"" ${srcdir}/etags.c \
@@ -163,8 +172,6 @@ diff --git a/lib-src/Makefile.in b/lib-src/Makefile.in
 +	  regex.o $(LOADLIBES) -o ctags${EXEEXT}
  
  profile${EXEEXT}: ${srcdir}/profile.c $(config_h)
-+	echo ${ALL_CFLAGS}
-+	echo ${BASE_CFLAGS}
  	$(CC) ${ALL_CFLAGS} ${srcdir}/profile.c \
 -	  $(LOADLIBES) $(LIB_CLOCK_GETTIME) -o profile
 +	  $(LOADLIBES) $(LIB_CLOCK_GETTIME) -o profile${EXEEXT}
@@ -181,7 +188,7 @@ diff --git a/lib-src/Makefile.in b/lib-src/Makefile.in
  
  pop.o: ${srcdir}/pop.c ${srcdir}/../lib/min-max.h $(config_h)
  	$(CC) -c ${CPP_CFLAGS} ${MOVE_FLAGS} ${srcdir}/pop.c
-@@ -334,13 +337,13 @@ pop.o: ${srcdir}/pop.c ${srcdir}/../lib/min-max.h $(config_h)
+@@ -334,13 +335,13 @@ pop.o: ${srcdir}/pop.c ${srcdir}/../lib/min-max.h $(config_h)
  emacsclient${EXEEXT}: ${srcdir}/emacsclient.c $(config_h)
  	$(CC) ${ALL_CFLAGS} ${srcdir}/emacsclient.c \
  	   -DVERSION="\"${version}\"" \
@@ -198,23 +205,6 @@ diff --git a/lib-src/Makefile.in b/lib-src/Makefile.in
 +	  ${srcdir}/update-game-score.c $(LOADLIBES) -o update-game-score${EXEEXT}
  
  ## Makefile ends here.
-diff --git a/lib-src/make-docfile.c b/lib-src/make-docfile.c
---- a/lib-src/make-docfile.c
-+++ b/lib-src/make-docfile.c
-@@ -166,11 +166,13 @@ main (int argc, char **argv)
-     }
-   if (argc > i + 1 && !strcmp (argv[i], "-d"))
-     {
-+      /*
-       if (chdir (argv[i + 1]) != 0)
- 	{
- 	  perror (argv[i + 1]);
- 	  return EXIT_FAILURE;
- 	}
-+        */
-       i += 2;
-     }
-   if (argc > i && !strcmp (argv[i], "-g"))
 diff --git a/lib-src/profile.c b/lib-src/profile.c
 --- a/lib-src/profile.c
 +++ b/lib-src/profile.c
@@ -241,55 +231,19 @@ diff --git a/lib/symlink.c b/lib/symlink.c
 diff --git a/lisp/Makefile.in b/lisp/Makefile.in
 --- a/lisp/Makefile.in
 +++ b/lisp/Makefile.in
-@@ -30,7 +30,7 @@ VPATH = $(srcdir)
+@@ -30,7 +30,8 @@ VPATH = $(srcdir)
  # We sometimes change directory before running Emacs (typically when
  # building out-of-tree, we chdir to the source directory), so we need
  # to use an absolute file name.
 -EMACS = ${abs_top_builddir}/src/emacs
++# TODO(petewil) Convert this to use ${EXEEXT} instead of .nexe - need symbol
 +EMACS = ${abs_top_builddir}/src/emacs.nexe
  
  # Command line flags for Emacs.
  
-diff --git a/lisp/emacs-lisp/bytecomp.el b/lisp/emacs-lisp/bytecomp.el
---- a/lisp/emacs-lisp/bytecomp.el
-+++ b/lisp/emacs-lisp/bytecomp.el
-@@ -1781,7 +1781,8 @@ The value is non-nil if there were no errors, nil if errors."
- 	(with-current-buffer output-buffer
- 	  (goto-char (point-max))
- 	  (insert "\n")			; aaah, unix.
--	  (if (file-writable-p target-file)
-+	  ;;(if (file-writable-p target-file)
-+	  (if t
- 	      ;; We must disable any code conversion here.
- 	      (let* ((coding-system-for-write 'no-conversion)
- 		     ;; Write to a tempfile so that if another Emacs
-@@ -4546,8 +4547,10 @@ already up-to-date."
-   "Reload any Lisp file that was changed since Emacs was dumped.
- Use with caution."
-   (let* ((argv0 (car command-line-args))
--         (emacs-file (executable-find argv0)))
--    (if (not (and emacs-file (file-executable-p emacs-file)))
-+         ;;(emacs-file (executable-find argv0)))
-+         (emacs-file argv0))
-+    ;;(if (not (and emacs-file (file-executable-p emacs-file)))
-+    (if (not emacs-file)
-         (message "Can't find %s to refresh preloaded Lisp files" argv0)
-       (dolist (f (reverse load-history))
-         (setq f (car f))
 diff --git a/lisp/files.el b/lisp/files.el
 --- a/lisp/files.el
 +++ b/lisp/files.el
-@@ -684,8 +684,8 @@ nil (meaning `default-directory') as the associated list element."
-       (if (file-exists-p dir)
- 	  (error "%s is not a directory" dir)
- 	(error "%s: no such directory" dir))
--    (unless (file-executable-p dir)
--      (error "Cannot cd to %s:  Permission denied" dir))
-+;;    (unless (file-executable-p dir)
-+;;      (error "Cannot cd to %s:  Permission denied" dir))
-     (setq default-directory dir)
-     (setq list-buffers-directory dir)))
- 
 @@ -1098,7 +1098,8 @@ containing it, until no links are left at any level.
      (while (not done)
        (setcar counter (1- (car counter)))
@@ -319,6 +273,62 @@ diff --git a/lisp/files.el b/lisp/files.el
  	    (if (equal ".." (file-name-nondirectory filename))
  		(setq filename
  		      (directory-file-name (file-name-directory (directory-file-name dir)))
+diff --git a/lisp/loadup.el b/lisp/loadup.el
+--- a/lisp/loadup.el
++++ b/lisp/loadup.el
+@@ -68,7 +68,7 @@
+     ;; Hash consing saved around 11% of pure space in my tests.
+     (setq purify-flag (make-hash-table :test 'equal :size 70000)))
+ 
+-(message "Using load-path %s" load-path)
++;; (message "Using load-path %s" load-path)
+ 
+ (if (or (member (nth 3 command-line-args) '("dump" "bootstrap"))
+ 	(member (nth 4 command-line-args) '("dump" "bootstrap")))
+diff --git a/lisp/startup.el b/lisp/startup.el
+--- a/lisp/startup.el
++++ b/lisp/startup.el
+@@ -1004,7 +1004,7 @@ Amongst another things, it parses the command-line arguments."
+ 			       ;; even if invoked with "-u USER", or
+ 			       ;; if $USER or $LOGNAME are set to
+ 			       ;; something different.
+-			       (if (memq system-type '(windows-nt ms-dos))
++			       (if (memq system-type '(windows-nt ms-dos nacl))
+ 				   "~"
+ 				 (concat "~" init-file-user))))
+ 	    nil
+@@ -1031,6 +1031,7 @@ Amongst another things, it parses the command-line arguments."
+ 			   (cond
+ 			     ((eq system-type 'ms-dos)
+ 			      (concat "~" init-file-user "/_emacs"))
++                             ((eq system-type 'nacl) "~/.emacs")
+ 			     ((not (eq system-type 'windows-nt))
+ 			      (concat "~" init-file-user "/.emacs"))
+ 			     ;; Else deal with the Windows situation
+@@ -1052,13 +1053,20 @@ Amongst another things, it parses the command-line arguments."
+ 
+ 		      (when (eq user-init-file t)
+ 			;; If we did not find ~/.emacs, try
+-			;; ~/.emacs.d/init.el.
++			;; ~<user>/.emacs.d/init.el.
+ 			(let ((otherfile
+ 			       (expand-file-name
+ 				"init"
+ 				(file-name-as-directory
+-				 (concat "~" init-file-user "/.emacs.d")))))
+-			  (load otherfile t t)
++				 (concat "~" init-file-user "/.emacs.d"))))
++                              ;; NaCl cannot expand ~<user>, just use '~'
++                              (otherfile-nacl
++                               (expand-file-name
++                                "init"
++                                (file-name-as-directory "~/.emacs.d"))))
++                          (if (eq system-type 'nacl)
++                              (load otherfile-nacl t t)
++                            (load otherfile t t))
+ 
+ 			  ;; If we did not find the user's init file,
+ 			  ;; set user-init-file conclusively.
 diff --git a/src/Makefile.in b/src/Makefile.in
 --- a/src/Makefile.in
 +++ b/src/Makefile.in
@@ -326,7 +336,7 @@ diff --git a/src/Makefile.in b/src/Makefile.in
  
  LIB_PTHREAD_SIGMASK = @LIB_PTHREAD_SIGMASK@
  
-+NACL_LIBS = ${NACL_CLI_MAIN_LIB} -lppapi_simple -lppapi -lnacl_io -ltar -lppapi_cpp
++NACL_LIBS = ${NACL_CLI_MAIN_LIB} -lppapi_simple -lppapi -lnacl_io -ltar -lppapi_cpp -l${NACL_CPP_LIB}
 +
  INTERVALS_H = dispextern.h intervals.h composite.h
  
@@ -348,8 +358,12 @@ diff --git a/src/Makefile.in b/src/Makefile.in
  
  ## lastfile must follow all files whose initialized data areas should
  ## be dumped as pure by dump-emacs.
-@@ -349,6 +355,26 @@ base_obj = dispnew.o frame.o scroll.o xdisp.o menu.o $(XMENU_OBJ) window.o \
- 	$(W32_OBJ) $(WINDOW_SYSTEM_OBJ)
+@@ -346,9 +352,29 @@ base_obj = dispnew.o frame.o scroll.o xdisp.o menu.o $(XMENU_OBJ) window.o \
+ 	doprnt.o intervals.o textprop.o composite.o xml.o \
+ 	profiler.o \
+ 	$(MSDOS_OBJ) $(MSDOS_X_OBJ) $(NS_OBJ) $(CYGWIN_OBJ) $(FONT_OBJ) \
+-	$(W32_OBJ) $(WINDOW_SYSTEM_OBJ)
++	$(W32_OBJ) $(WINDOW_SYSTEM_OBJ) -lnacl_io
  obj = $(base_obj) $(NS_OBJC_OBJ)
  
 +## Just like $(obj), but includes nacl_emacs.o (built with NACL_EMACS) instead
@@ -375,12 +389,11 @@ diff --git a/src/Makefile.in b/src/Makefile.in
  ## Object files used on some machine or other.
  ## These go in the DOC file on all machines in case they are needed.
  ## Some of them have no DOC entries, but it does no harm to have them
-@@ -400,9 +426,11 @@ LIBES = $(LIBS) $(W32_LIBS) $(LIBS_GNUSTEP) $(LIBX_BASE) $(LIBIMAGE) \
+@@ -400,9 +426,10 @@ LIBES = $(LIBS) $(W32_LIBS) $(LIBS_GNUSTEP) $(LIBX_BASE) $(LIBIMAGE) \
     $(LIBGNUTLS_LIBS) $(LIB_PTHREAD) $(LIB_PTHREAD_SIGMASK) \
     $(LIB_GCC) $(LIB_MATH) $(LIB_STANDARD) $(LIB_GCC)
  
 -all: emacs$(EXEEXT) $(OTHER_FILES)
-+#all: emacs$(EXEEXT) $(OTHER_FILES)
 +all: emacs$(EXEEXT) $(OTHER_FILES) nacl_temacs$(EXEEXT)
  .PHONY: all
  
@@ -388,7 +401,7 @@ diff --git a/src/Makefile.in b/src/Makefile.in
  $(leimdir)/leim-list.el: bootstrap-emacs$(EXEEXT)
  	cd $(leimdir) && $(MAKE) $(MFLAGS) leim-list.el EMACS=$(bootstrap_exe)
  
-@@ -414,7 +442,12 @@ $(leimdir)/leim-list.el: bootstrap-emacs$(EXEEXT)
+@@ -414,7 +441,12 @@ $(leimdir)/leim-list.el: bootstrap-emacs$(EXEEXT)
  emacs$(EXEEXT): temacs$(EXEEXT) $(etc)/DOC $(lisp) $(leimdir)/leim-list.el
  	if test "$(CANNOT_DUMP)" = "yes"; then \
  	  rm -f emacs$(EXEEXT); \
@@ -402,7 +415,7 @@ diff --git a/src/Makefile.in b/src/Makefile.in
  	else \
  	  LC_ALL=C $(RUN_TEMACS) -batch -l loadup dump || exit 1; \
  	  test "X$(PAXCTL)" = X || $(PAXCTL) -zex emacs$(EXEEXT); \
-@@ -438,8 +471,8 @@ emacs$(EXEEXT): temacs$(EXEEXT) $(etc)/DOC $(lisp) $(leimdir)/leim-list.el
+@@ -438,8 +470,8 @@ emacs$(EXEEXT): temacs$(EXEEXT) $(etc)/DOC $(lisp) $(leimdir)/leim-list.el
  ##
  $(etc)/DOC: $(libsrc)/make-docfile$(EXEEXT) $(obj) $(lisp)
  	-rm -f $(etc)/DOC
@@ -413,7 +426,7 @@ diff --git a/src/Makefile.in b/src/Makefile.in
  
  $(libsrc)/make-docfile$(EXEEXT):
  	cd $(libsrc); $(MAKE) $(MFLAGS) make-docfile$(EXEEXT)
-@@ -453,7 +486,7 @@ GLOBAL_SOURCES = $(base_obj:.o=.c) $(NS_OBJC_OBJ:.o=.m)
+@@ -453,7 +485,7 @@ GLOBAL_SOURCES = $(base_obj:.o=.c) $(NS_OBJC_OBJ:.o=.m)
  
  gl-stamp: $(libsrc)/make-docfile$(EXEEXT) $(GLOBAL_SOURCES)
  	@rm -f gl-tmp
@@ -422,7 +435,7 @@ diff --git a/src/Makefile.in b/src/Makefile.in
  	$(srcdir)/../build-aux/move-if-change gl-tmp globals.h
  	echo timestamp > $@
  
-@@ -464,7 +497,15 @@ $(lib)/libgnu.a: $(config_h)
+@@ -464,7 +496,15 @@ $(lib)/libgnu.a: $(config_h)
  
  temacs$(EXEEXT): $(START_FILES) stamp-oldxmenu $(obj) $(otherobj) $(lib)/libgnu.a
  	$(CC) $(LD_FIRSTFLAG) $(ALL_CFLAGS) $(TEMACS_LDFLAGS) $(LDFLAGS) \
@@ -439,7 +452,7 @@ diff --git a/src/Makefile.in b/src/Makefile.in
  	test "$(CANNOT_DUMP)" = "yes" || \
  	  test "X$(PAXCTL)" = X || $(PAXCTL) -r temacs$(EXEEXT)
  
-@@ -613,8 +654,12 @@ $(lispsource)/loaddefs.el: $(BOOTSTRAPEMACS) $(VCSWITNESS)
+@@ -613,8 +653,12 @@ $(lispsource)/loaddefs.el: $(BOOTSTRAPEMACS) $(VCSWITNESS)
  bootstrap-emacs$(EXEEXT): temacs$(EXEEXT)
  	cd ../lisp; $(MAKE) $(MFLAGS) update-subdirs
  	if test "$(CANNOT_DUMP)" = "yes"; then \
@@ -454,32 +467,6 @@ diff --git a/src/Makefile.in b/src/Makefile.in
  	else \
  	  $(RUN_TEMACS) --batch --load loadup bootstrap || exit 1; \
  	  test "X$(PAXCTL)" = X || $(PAXCTL) -zex emacs$(EXEEXT); \
-diff --git a/src/buffer.c b/src/buffer.c
---- a/src/buffer.c
-+++ b/src/buffer.c
-@@ -5324,7 +5324,8 @@ init_buffer (void)
-   if (NILP (BVAR (&buffer_defaults, enable_multibyte_characters)))
-     Fset_buffer_multibyte (Qnil);
- 
--  pwd = get_current_dir_name ();
-+  //pwd = get_current_dir_name ();
-+  pwd = strdup("./");
- 
-   if (!pwd)
-     fatal ("`get_current_dir_name' failed: %s\n", strerror (errno));
-diff --git a/src/charset.c b/src/charset.c
---- a/src/charset.c
-+++ b/src/charset.c
-@@ -2293,7 +2293,8 @@ init_charset (void)
- {
-   Lisp_Object tempdir;
-   tempdir = Fexpand_file_name (build_string ("charsets"), Vdata_directory);
--  if (access (SSDATA (tempdir), 0) < 0)
-+  //if (access (SSDATA (tempdir), 0) < 0)
-+  if (0)
-     {
-       /* This used to be non-fatal (dir_warning), but it should not
-          happen, and if it does sooner or later it will cause some
 diff --git a/src/emacs.c b/src/emacs.c
 --- a/src/emacs.c
 +++ b/src/emacs.c
@@ -572,7 +559,16 @@ diff --git a/src/fileio.c b/src/fileio.c
  	{
            ptrdiff_t count;
            symlink_target = Ffile_symlink_p (file);
-@@ -2698,6 +2705,9 @@ DEFUN ("file-writable-p", Ffile_writable_p, Sfile_writable_p, 1, 1, 0,
+@@ -2630,6 +2637,8 @@ For a directory, this means you can access files in that directory.  */)
+   Lisp_Object absname;
+   Lisp_Object handler;
+ 
++  return Qt;
++
+   CHECK_STRING (filename);
+   absname = Fexpand_file_name (filename, Qnil);
+ 
+@@ -2698,6 +2707,9 @@ DEFUN ("file-writable-p", Ffile_writable_p, Sfile_writable_p, 1, 1, 0,
         doc: /* Return t if file FILENAME can be written or created by you.  */)
    (Lisp_Object filename)
  {
@@ -582,7 +578,7 @@ diff --git a/src/fileio.c b/src/fileio.c
    Lisp_Object absname, dir, encoded;
    Lisp_Object handler;
  
-@@ -2731,6 +2741,8 @@ DEFUN ("file-writable-p", Ffile_writable_p, Sfile_writable_p, 1, 1, 0,
+@@ -2731,6 +2743,8 @@ DEFUN ("file-writable-p", Ffile_writable_p, Sfile_writable_p, 1, 1, 0,
    return (check_writable (!NILP (dir) ? SSDATA (dir) : "")
  	  ? Qt : Qnil);
  #endif
@@ -591,7 +587,7 @@ diff --git a/src/fileio.c b/src/fileio.c
  }
  
  DEFUN ("access-file", Faccess_file, Saccess_file, 2, 2, 0,
-@@ -4848,6 +4860,7 @@ This calls `write-region-annotate-functions' at the start, and
+@@ -4848,6 +4862,7 @@ This calls `write-region-annotate-functions' at the start, and
  
    immediate_quit = 0;
  
@@ -599,7 +595,7 @@ diff --git a/src/fileio.c b/src/fileio.c
  #ifdef HAVE_FSYNC
    /* Note fsync appears to change the modtime on BSD4.2 (both vax and sun).
       Disk full in NFS may be reported here.  */
-@@ -4862,6 +4875,7 @@ This calls `write-region-annotate-functions' at the start, and
+@@ -4862,6 +4877,7 @@ This calls `write-region-annotate-functions' at the start, and
  	ok = 0, save_errno = errno;
      }
  #endif
@@ -607,6 +603,49 @@ diff --git a/src/fileio.c b/src/fileio.c
  
    modtime = invalid_emacs_time ();
    if (visiting)
+diff --git a/src/keyboard.c b/src/keyboard.c
+--- a/src/keyboard.c
++++ b/src/keyboard.c
+@@ -6858,6 +6858,26 @@ decode_keyboard_code (struct tty_display_info *tty,
+    and so this function is called once for each individual termcap
+    terminal.  The first parameter indicates which terminal to read from.  */
+ 
++#if defined(__native_client__)
++#include "nacl_io/kernel_intercept.h"
++#include "nacl_io/kernel_wrap.h"
++#include <stdarg.h>
++
++/*
++ * TODO(bradnelson): Drop this when fcntl is sorted out in nacl_io.
++ * Explicitly use nacl_fnctl.
++ * When built as a shared library, without this emacs seems to hit stubs.
++ */
++int nacl_fcntl(int fd, int cmd, ...) {
++  va_list ap;
++  va_start(ap, cmd);
++  int rtn = ki_fcntl(fd, cmd, ap);
++  va_end(ap);
++  return rtn;
++}
++#define fcntl nacl_fcntl
++#endif
++
+ int
+ tty_read_avail_input (struct terminal *terminal,
+                       struct input_event *hold_quit)
+@@ -6946,10 +6966,10 @@ tty_read_avail_input (struct terminal *terminal,
+     return 0;
+   if (n_to_read > sizeof cbuf)
+     n_to_read = sizeof cbuf;
+-#elif defined USG || defined CYGWIN
++#elif defined USG || defined CYGWIN || defined __native_client__
+   /* Read some input if available, but don't wait.  */
+   n_to_read = sizeof cbuf;
+-  fcntl (fileno (tty->input), F_SETFL, O_NDELAY);
++  fcntl (fileno (tty->input), F_SETFL, O_NONBLOCK);
+ #else
+ # error "Cannot read without possibly delaying"
+ #endif
 diff --git a/src/vm-limit.c b/src/vm-limit.c
 --- a/src/vm-limit.c
 +++ b/src/vm-limit.c

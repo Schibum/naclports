@@ -4,8 +4,10 @@
  * found in the LICENSE file.
  */
 
+#include <setjmp.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 #ifdef __BIONIC__
 // TODO(sbc): remove this once bionic toolchain gets a copy of
@@ -15,6 +17,14 @@
 #include_next <spawn.h>
 #endif
 
+// Allow multi-threaded vfork on some platforms.
+#if defined(__BIONIC__)
+// Thread local variables are not currently supported with bionic.
+#define NACL_SPAWN_TLS
+#else
+#define NACL_SPAWN_TLS __thread
+#endif
+
 /*
  * Include guards are here so that this header can forward to the next one in
  * presence of an already installed copy of nacl-spawn.
@@ -22,9 +32,7 @@
 #ifndef NACL_SPAWN_SPAWN_H_
 #define NACL_SPAWN_SPAWN_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+__BEGIN_DECLS
 
 /*
  * Spawn a child using the given args.
@@ -66,8 +74,46 @@ extern int spawnve(int mode, const char* path,
  */
 extern void jseval(const char* cmd, char** data, size_t* len);
 
-#ifdef __cplusplus
-}
+/*
+ * Implement vfork as a macro.
+ *
+ * Returns:
+ *   Pid of a child, or zero if in the child.
+ *
+ * Done as a macro in order to allow portable implementation of
+ * vfork's behavior, which requires multiple returns from the same
+ * code location.
+ * A before function is called to setup vfork state,
+ * followed by setjmp passing its result to an after function.
+ * A global setjmp buffer is used.
+ */
+extern void nacl_spawn_vfork_before(void);
+extern pid_t nacl_spawn_vfork_after(int jmping);
+extern NACL_SPAWN_TLS jmp_buf nacl_spawn_vfork_env;
+#define vfork() (nacl_spawn_vfork_before(), \
+    nacl_spawn_vfork_after(setjmp(nacl_spawn_vfork_env)))
+
+/*
+ * Exit immediately with no cleanup.
+ *
+ * Args:
+ *   status: Exit status to return from process.
+ *
+ * Implemented as a macro to ensure we get the nacl_spawn version hooked
+ * to interoperate with vfork in the case of an error.
+ */
+extern void nacl_spawn_vfork_exit(int status);
+#if !defined(IN_NACL_SPAWN_CC)
+#define _exit(status) nacl_spawn_vfork_exit(status)
 #endif
+
+/*
+ * Declarations of exec variants we support that aren't in our libc headers.
+ */
+extern int execvpe(const char *file, char *const argv[], char *const envp[]);
+extern int execlpe(const char *path,
+                   const char *arg, ...); /* char* const envp[] */
+
+__END_DECLS
 
 #endif /* NACL_SPAWN_SPAWN_H_ */

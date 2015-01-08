@@ -1,6 +1,7 @@
 # Copyright (c) 2013 The Native Client Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
+
 """Tool for manipulating naclports packages in python.
 
 This tool can be used to for working with naclports packages.
@@ -8,9 +9,9 @@ It can also be incorporated into other tools that need to
 work with packages (e.g. 'update_mirror.py' uses it to iterate
 through all packages and mirror them on Google Cloud Storage).
 """
+
 from __future__ import print_function
 import os
-import shutil
 import sys
 
 if sys.version_info < (2, 7, 0):
@@ -21,19 +22,19 @@ import argparse
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-import naclports
-import naclports.binary_package
+from naclports import configuration, error, source_package, util, paths
 import naclports.package
-import naclports.source_package
-from naclports import Error, DisabledError, Trace, NACL_SDK_ROOT
-from naclports.configuration import Configuration
 
 
 def CmdList(config, options, args):
   """List installed packages"""
   if len(args):
-    raise Error('list command takes no arguments')
-  for package in naclports.package.InstalledPackageIterator(config):
+    raise error.Error('list command takes no arguments')
+  if options.all:
+    iterator = source_package.SourcePackageIterator()
+  else:
+    iterator = naclports.package.InstalledPackageIterator(config)
+  for package in iterator:
     if options.verbose:
       sys.stdout.write('%-15s %s\n' % (package.NAME, package.VERSION))
     else:
@@ -44,7 +45,7 @@ def CmdList(config, options, args):
 def CmdInfo(config, options, args):
   """Print infomation on installed package(s)"""
   if len(args) != 1:
-    raise Error('info command takes a single package name')
+    raise error.Error('info command takes a single package name')
   package_name = args[0]
   pkg = naclports.package.CreateInstalledPackage(package_name, config)
   info_file = pkg.GetInstallStamp()
@@ -61,7 +62,7 @@ def CmdPkgListDeps(package, options):
 
 def CmdPkgContents(package, options):
   """List contents of an installed package"""
-  install_root = naclports.GetInstallRoot(package.config)
+  install_root = util.GetInstallRoot(package.config)
   for filename in package.Files():
     if options.verbose:
       filename = os.path.join(install_root, filename)
@@ -81,10 +82,10 @@ def CmdPkgCheck(package, options):
   # This final check verifies the dependencies are valid.
   # Cache the list of all packages names since this function could be called
   # a lot in the case of "naclports check --all".
-  packages = naclports.source_package.SourcePackageIterator()
+  packages = source_package.SourcePackageIterator()
   if not CmdPkgCheck.all_package_names:
     CmdPkgCheck.all_package_names = [os.path.basename(p.root) for p in packages]
-  naclports.Log("Checking deps for %s .." % package.NAME)
+  util.Log("Checking deps for %s .." % package.NAME)
   package.CheckDeps(CmdPkgCheck.all_package_names)
 
 CmdPkgCheck.all_package_names = None
@@ -116,25 +117,36 @@ def CmdPkgClean(package, options):
   package.Clean()
 
 
-def CmdPkgVerify(package, options):
-  """Verify package(s)"""
-  package.Verify()
+def CmdPkgUpdatePatch(package, options):
+  """Update patch file for package(s)"""
+  package.UpdatePatch()
+
+
+def CmdPkgExtract(package, options):
+  """Extact source archive for package(s)"""
+  package.Download()
+  package.Extract()
+
+
+def CmdPkgPatch(package, options):
+  """Apply naclports patch for package(s)"""
+  package.Patch()
 
 
 def CleanAll(config):
   """Remove all build directories and all pre-built packages as well
   as all installed packages for the given configuration."""
   def rmtree(path):
-    naclports.Log('removing %s' % path)
-    if os.path.exists(path):
-      shutil.rmtree(path)
+    util.Log('removing %s' % path)
+    util.RemoveTree(path)
 
-  rmtree(naclports.STAMP_DIR)
-  rmtree(naclports.BUILD_ROOT)
-  rmtree(naclports.PUBLISH_ROOT)
-  rmtree(naclports.PACKAGES_ROOT)
-  rmtree(naclports.GetInstallStampRoot(config))
-  rmtree(naclports.GetInstallRoot(config))
+  rmtree(paths.STAMP_DIR)
+  rmtree(paths.BUILD_ROOT)
+  rmtree(paths.PUBLISH_ROOT)
+  rmtree(paths.PACKAGES_ROOT)
+  rmtree(util.GetInstallStampRoot(config))
+  rmtree(util.GetInstallRoot(config))
+
 
 
 def run_main(args):
@@ -148,11 +160,13 @@ def run_main(args):
     'check': CmdPkgCheck,
     'build': CmdPkgBuild,
     'install': CmdPkgInstall,
-    'verify': CmdPkgVerify,
     'clean': CmdPkgClean,
     'uninstall': CmdPkgUninstall,
     'contents': CmdPkgContents,
-    'depends': CmdPkgListDeps
+    'depends': CmdPkgListDeps,
+    'updatepatch': CmdPkgUpdatePatch,
+    'extract': CmdPkgExtract,
+    'patch': CmdPkgPatch
   }
 
   installed_pkg_commands = ['contents', 'uninstall']
@@ -161,7 +175,7 @@ def run_main(args):
 
   epilog = "The following commands are available:\n"
   for name, function in all_commands.iteritems():
-    epilog += '  %-10s - %s\n' % (name, function.__doc__)
+    epilog += '  %-12s - %s\n' % (name, function.__doc__)
 
   parser = argparse.ArgumentParser(prog='naclports', description=__doc__,
       formatter_class=argparse.RawDescriptionHelpFormatter, epilog=epilog)
@@ -200,7 +214,7 @@ def run_main(args):
   parser.add_argument('pkg', nargs='*', help="package name or directory")
   args = parser.parse_args(args)
 
-  naclports.verbose = args.verbose or os.environ.get('VERBOSE') == '1'
+  util.SetVerbose(args.verbose or os.environ.get('VERBOSE') == '1')
   if args.verbose_build:
     os.environ['VERBOSE'] = '1'
   else:
@@ -209,18 +223,8 @@ def run_main(args):
     if 'V' in os.environ:
       del os.environ['V']
 
-  if not NACL_SDK_ROOT:
-    raise Error('$NACL_SDK_ROOT not set')
-
-  if not os.path.isdir(NACL_SDK_ROOT):
-    raise Error('$NACL_SDK_ROOT does not exist: %s' % NACL_SDK_ROOT)
-
-  sentinel = os.path.join(NACL_SDK_ROOT, 'tools', 'getos.py')
-  if not os.path.exists(sentinel):
-    raise Error("$NACL_SDK_ROOT (%s) doesn't look right. "
-                "Couldn't find sentinel file (%s)" % (NACL_SDK_ROOT, sentinel))
-
-  config = Configuration(args.arch, args.toolchain, args.debug)
+  util.CheckSDKRoot()
+  config = configuration.Configuration(args.arch, args.toolchain, args.debug)
 
   if args.command in base_commands:
     base_commands[args.command](config, args, args.pkg)
@@ -241,9 +245,9 @@ def run_main(args):
   def DoCmd(package):
     try:
       pkg_commands[args.command](package, args)
-    except DisabledError as e:
+    except error.DisabledError as e:
       if args.ignore_disabled:
-        naclports.Log('naclports: %s' % e)
+        util.Log('naclports: %s' % e)
       else:
         raise e
 
@@ -255,16 +259,15 @@ def run_main(args):
       if args.command in installed_pkg_commands:
         package_iterator = naclports.package.InstalledPackageIterator(config)
       else:
-        package_iterator = naclports.source_package.SourcePackageIterator()
+        package_iterator = source_package.SourcePackageIterator()
       for p in package_iterator:
-        if not p.DISABLED:
-          DoCmd(p)
+        DoCmd(p)
   else:
     for package_name in package_names:
       if args.command in installed_pkg_commands:
         p = naclports.package.CreateInstalledPackage(package_name, config)
       else:
-        p = naclports.source_package.CreatePackage(package_name, config)
+        p = source_package.CreatePackage(package_name, config)
       DoCmd(p)
 
 
@@ -274,7 +277,7 @@ def main(args):
   except KeyboardInterrupt:
     sys.stderr.write('naclports: interrupted\n')
     return 1
-  except Error as e:
+  except error.Error as e:
     sys.stderr.write('naclports: %s\n' % e)
     return 1
 

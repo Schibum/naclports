@@ -41,7 +41,6 @@ ElfReader::ElfReader(const char* filename)
   if (!ReadHeaders(fp.get(), &phdrs))
     return;
 
-  bool dynamic_found = false;
   Elf64_Addr straddr = 0;
   size_t strsize = 0;
   std::vector<int> neededs;
@@ -245,6 +244,8 @@ void ElfReader::PrintError(const char* fmt, ...) {
   va_start(ap, fmt);
   int written = vsnprintf(buf, kBufSize - 1, fmt, ap);
   assert(written < kBufSize);
+  if (written >= kBufSize)
+    buf[kBufSize-1] = '\0';
 
   if (errno)
     fprintf(stderr, "%s: %s: %s\n", filename_, buf, strerror(errno));

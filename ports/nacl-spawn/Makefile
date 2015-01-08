@@ -11,7 +11,7 @@ NACL_SPAWN_OBJS += elf_reader.o library_dependencies.o
 
 TEST_EXES = test/elf_reader test/library_dependencies
 TEST_BINARIES = test/test_exe test/libtest1.so test/libtest2.so test/libtest3.so
-CPPFLAGS += -Iinclude
+CPPFLAGS += -Wall -Werror -Iinclude
 
 all: test
 
@@ -20,9 +20,6 @@ all: test
 libcli_main.a: cli_main.o nacl_startup_untar.o
 	rm -f $@
 	$(NACLAR) rcs $@ $^
-
-cli_main.o: cli_main.c
-	$(NACLCC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 nacl_startup_untar.o: nacl_startup_untar.c
 	$(NACLCC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
