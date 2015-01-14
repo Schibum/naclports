@@ -18,6 +18,7 @@ if [ "$NACL_ARCH" = "arm" ]; then
 fi
 
 EXTRA_CONFIGURE_ARGS="--disable-largefile --without-fftw --without-xml
+  --with-quantum-depth=8
   --disable-docs
   --without-webp
   --without-tiff
@@ -36,6 +37,7 @@ EXTRA_CONFIGURE_ARGS="--disable-largefile --without-fftw --without-xml
   --without-djvu
   --without-fpx
   --without-x
+  --without-lzma
   --without-dps"
 
 EXECUTABLES="
