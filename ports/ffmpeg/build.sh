@@ -34,8 +34,8 @@ ConfigureStep() {
     --disable-everything \
     --enable-muxer=mp4,webm \
     --enable-demuxer=mov,matroska \
-    --enable-encoder=x264,aac,libvpx_vp8,libvorbis \
-    --enable-decoder=x264,aac,libvpx_vp8,libvorbis \
+    --enable-encoder=libx264,aac,libvpx_vp8,libvorbis \
+    --enable-decoder=h264,aac,libvpx_vp8,libvorbis \
     --enable-filter="${FILTERS}" \
     --disable-yasm \
     --disable-asm \
