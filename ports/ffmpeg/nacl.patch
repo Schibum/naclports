@@ -1,8 +1,20 @@
+diff --git a/configure b/configure
+index 618dfab..2cbdede 100755
+--- a/configure
++++ b/configure
+@@ -4301,7 +4301,6 @@ die_license_disabled gpl libcdio
+ die_license_disabled gpl libsmbclient
+ die_license_disabled gpl libutvideo
+ die_license_disabled gpl libvidstab
+-die_license_disabled gpl libx264
+ die_license_disabled gpl libx265
+ die_license_disabled gpl libxavs
+ die_license_disabled gpl libxvid
 diff --git a/ffmpeg.c b/ffmpeg.c
-index dba6089..b67a8c4 100644
+index ee8039c..b2b8e49 100644
 --- a/ffmpeg.c
 +++ b/ffmpeg.c
-@@ -3360,7 +3360,7 @@ static int transcode(void)
+@@ -3761,7 +3761,7 @@ static int transcode(void)
  
  static int64_t getutime(void)
  {
@@ -11,7 +23,7 @@ index dba6089..b67a8c4 100644
      struct rusage rusage;
  
      getrusage(RUSAGE_SELF, &rusage);
-@@ -3378,7 +3378,7 @@ static int64_t getutime(void)
+@@ -3779,7 +3779,7 @@ static int64_t getutime(void)
  
  static int64_t getmaxrss(void)
  {
