@@ -32,8 +32,8 @@ ConfigureStep() {
     --cross-prefix=${NACL_CROSS_PREFIX}- \
     --target-os=linux \
     --disable-everything \
-    --enable-muxer=webm \
-    --enable-demuxer=matroska \
+    --enable-muxer=mp4,webm \
+    --enable-demuxer=mov,matroska \
     --enable-encoder=x264,aac,libvpx_vp8,libvorbis \
     --enable-decoder=x264,aac,libvpx_vp8,libvorbis \
     --enable-filter="${FILTERS}" \
