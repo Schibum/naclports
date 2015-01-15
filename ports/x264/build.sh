@@ -4,7 +4,8 @@
 
 BUILD_DIR=${SRC_DIR}
 EXECUTABLES=x264${NACL_EXEEXT}
-EXTRA_CONFIGURE_ARGS="--enable-static --disable-asm --disable-thread"
+EXTRA_CONFIGURE_ARGS="--enable-static --disable-asm --disable-thread
+--disable-gpl --disable-swscale"
 
 if [ "${NACL_SHARED}" = "1" ]; then
   EXTRA_CONFIGURE_ARGS+=" --enable-shared"

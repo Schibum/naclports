@@ -34,12 +34,13 @@ ConfigureStep() {
     --disable-everything \
     --enable-muxer=webm \
     --enable-demuxer=matroska \
-    --enable-encoder=libvpx_vp8,libvorbis \
-    --enable-decoder=libvpx_vp8,libvorbis \
+    --enable-encoder=x264,aac,libvpx_vp8,libvorbis \
+    --enable-decoder=x264,aac,libvpx_vp8,libvorbis \
     --enable-filter="${FILTERS}" \
     --disable-yasm \
     --disable-asm \
     --enable-static \
+    --enable-libx264 \
     --enable-cross-compile \
     --enable-protocol=file \
     --enable-libvorbis \
