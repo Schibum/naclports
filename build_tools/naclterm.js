@@ -235,13 +235,14 @@ NaClTerm.prototype.spawnRootProcess_ = function() {
   var self = this;
   var argv = NaClTerm.argv || [];
   var env = NaClTerm.env || [];
+  var cwd = NaClTerm.cwd || '/';
   argv = [NaClTerm.nmf].concat(argv);
 
   try {
     var handleSuccess = function(naclType) {
       self.print('Loading NaCl module.\n');
       self.processManager.spawn(
-          NaClTerm.nmf, argv, env, '/', naclType, null, function(rootPid) {
+          NaClTerm.nmf, argv, env, cwd, naclType, null, function(rootPid) {
         // Warn if we close while still running.
         window.onbeforeunload = function() {
           return 'Processes still running!';
@@ -284,10 +285,10 @@ NaClTerm.prototype.onVTKeystroke_ = function(str) {
     if (str.charCodeAt(0) === NaClTerm.CONTROL_C) {
       if (this.processManager.sigint()) {
         this.print('\n');
+        return;
       }
-    } else {
-      this.processManager.sendStdinForeground(str);
     }
+    this.processManager.sendStdinForeground(str);
   } catch (e) {
     this.print(e.message);
   }

@@ -23,8 +23,10 @@ import zipfile
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, os.path.join(SRC_DIR, 'build_tools'))
+sys.path.insert(0, os.path.join(SRC_DIR, 'lib'))
 
 import httpd
+import naclports
 
 
 # Pinned chrome revision. Update this to pull in a new chrome.
@@ -99,7 +101,7 @@ def ChromeRunPath(arch):
   elif sys.platform == 'darwin':
     path = 'chrome-mac/Chromium.app/Contents/MacOS/Chromium'
   elif sys.platform.startswith('linux'):
-    path = 'chrome-linux/chrome'
+    path = 'chrome-linux/chrome-wrapper'
   else:
     logging.error('Bad architecture %s' % arch)
     sys.exit(1)
@@ -116,10 +118,15 @@ def DownloadChrome(url, destination):
     destination: A directory to download chrome to.
   """
   stamp_filename = os.path.join(destination, 'STAMP')
-  if os.path.exists(stamp_filename) and open(stamp_filename).read() == url:
-    logging.info('Skipping chrome download, '
-                 'chrome in %s is up to date' % destination)
-    return
+  # Change this line each time the mods we make to the chrome checkout change
+  # otherwise the modding code will be skipped.
+  stamp_content = 'mods_v2:' + url
+  if os.path.exists(stamp_filename):
+    with open(stamp_filename) as f:
+      if f.read() == stamp_content:
+        logging.info('Skipping chrome download, '
+                     'chrome in %s is up to date' % destination)
+        return
   if os.path.exists(destination):
     logging.info('Deleting old chrome...')
     shutil.rmtree(destination)
@@ -128,25 +135,43 @@ def DownloadChrome(url, destination):
   os.makedirs(destination)
 
   logging.info('Downloading chrome from %s to %s...' % (url, destination))
+  chrome_zip = os.path.join(OUT_DIR, 'cache', os.path.basename(url))
+  chrome_zip_tmp = chrome_zip + '.partial'
   try:
-    with contextlib.closing(urllib2.urlopen(url)) as stream:
-      chrome_data = cStringIO.StringIO(stream.read())
-      with zipfile.ZipFile(chrome_data) as zip_archive:
-        zip_archive.extractall(destination)
-        # Change the executables to be executable.
-        for root, _, files in os.walk(destination):
-          for filename in files:
-            if (filename.startswith('Chromium') or
-                filename in ['chrome', 'nacl_helper', 'nacl_helper_bootstrap']):
-              path = os.path.join(root, filename)
-              os.chmod(path, 0755)
-  except Exception, e:
-    logging.error('Unable to download chrome [%s].' % e)
+    naclports.util.DownloadFile(chrome_zip_tmp, url)
+  except naclports.error.Error as e:
+    logging.error('Unable to download chrome: %s' % str(e))
     sys.exit(1)
+
+  os.rename(chrome_zip_tmp, chrome_zip)
+
+  logging.info('Exctracting chrome...')
+  with zipfile.ZipFile(chrome_zip) as zip_archive:
+    zip_archive.extractall(destination)
+    # Change the executables to be executable.
+    for root, _, files in os.walk(destination):
+      for filename in files:
+        if (filename.startswith('Chromium') or
+            filename in ('chrome-wrapper', 'chrome', 'nacl_helper',
+                         'nacl_helper_bootstrap')):
+          path = os.path.join(root, filename)
+          os.chmod(path, 0755)
+
+    if sys.platform.startswith('linux'):
+      if '64' in url:
+        libudev0 = '/lib/x86_64-linux-gnu/libudev.so.0'
+        libudev1 = '/lib/x86_64-linux-gnu/libudev.so.1'
+      else:
+        libudev0 = '/lib/i386-linux-gnu/libudev.so.0'
+        libudev1 = '/lib/i386-linux-gnu/libudev.so.1'
+      if os.path.exists(libudev1) and not os.path.exists(libudev0):
+        link = os.path.join(destination, 'chrome-linux', 'libudev.so.0')
+        logging.info('creating link %s' % link)
+        os.symlink(libudev1, link)
 
   logging.info('Writing stamp...')
   with open(stamp_filename, 'w') as fh:
-    fh.write(url)
+    fh.write(stamp_content)
   logging.info('Done.')
 
 
@@ -338,9 +363,9 @@ class ChromeTestHandler(httpd.QuittableHTTPHandler):
     # Fall back to a providing normal HTTP access.
     httpd.QuittableHTTPHandler.do_GET(self)
 
-  def log_message(self, format, *args):
+  def log_message(self, fmt, *args):
     if logging.getLogger().isEnabledFor(logging.DEBUG):
-      httpd.QuittableHTTPHandler.log_message(self, format, *args)
+      httpd.QuittableHTTPHandler.log_message(self, fmt, *args)
 
 
 def Hex2Alpha(ch):
@@ -464,7 +489,7 @@ def RunChrome(chrome_path, timeout, filter_string, roots, use_xvfb,
           cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
           preexec_fn=ProcessGroup)
       logging.info('Started chrome with command line: %s' % (' '.join(cmd)))
-      stdout, stderr, returncode = CommunicateWithTimeout(p, timeout=timeout)
+      stdout, _, returncode = CommunicateWithTimeout(p, timeout=timeout)
       if logging.getLogger().isEnabledFor(logging.DEBUG):
         sys.stdout.write('\n[[[ STDOUT ]]]\n')
         sys.stdout.write('-' * 70 + '\n')
@@ -475,7 +500,7 @@ def RunChrome(chrome_path, timeout, filter_string, roots, use_xvfb,
       try:
         with contextlib.closing(urllib2.urlopen(quit_url)) as stream:
           stream.read()
-      except:
+      except Exception:
         pass
     thread.join()
     logging.info('Shutdown web server.')
@@ -576,7 +601,8 @@ def Main(argv):
   if sys.platform.startswith('linux'):
     default_sandbox_locations = [
       '/usr/local/sbin/chrome-devel-sandbox',
-      '/opt/chromium/chrome_sandbox'
+      '/opt/chromium/chrome_sandbox',
+      '/opt/google/chrome-beta/chrome-sandbox'
     ]
     if 'CHROME_DEVEL_SANDBOX' not in os.environ:
       for filename in default_sandbox_locations:

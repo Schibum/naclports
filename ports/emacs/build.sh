@@ -26,6 +26,7 @@ ConfigureStep() {
 # partially the first time that makes the second time succeed.
 # TODO(petewil): Find and fix the problem that makes us build twice.
 BuildStep() {
+  # Since we can't detect that a rebuild file hasn't changed, delete them all.
   # Rebuild a second time on the buildbots only.
   if [ "${BUILDBOT_BUILDERNAME:-}" != "" ]; then
     DefaultBuildStep || DefaultBuildStep
@@ -41,6 +42,7 @@ PatchStep() {
   rm -f lisp/emacs-lisp/bytecomp.elc
   rm -f lisp/files.elc
   rm -f lisp/international/quail.elc
+  rm -f lisp/startup.elc
   LogExecute cp ${START_DIR}/emacs_pepper.c ${SRC_DIR}/src/emacs_pepper.c
 }
 
@@ -64,6 +66,8 @@ InstallStep() {
   rm -rf bin
   rm -rf share/man
   find . -iname "*.nexe" -delete
+  mkdir -p ${ASSEMBLY_DIR}/emacstar/home/user/.emacs.d
+  cp ${START_DIR}/init.el ${ASSEMBLY_DIR}/emacstar/home/user/.emacs.d
   tar cf ${ASSEMBLY_DIR}/emacs.tar .
   rm -rf ${ASSEMBLY_DIR}/emacstar
   cd ${ASSEMBLY_DIR}
@@ -77,12 +81,12 @@ InstallStep() {
   LogExecute python ${TOOLS_DIR}/create_term.py emacs.nmf
 
   InstallNaClTerm ${ASSEMBLY_DIR}
-  LogExecute cp ${START_DIR}/manifest.json ${ASSEMBLY_DIR}
+  GenerateManifest ${START_DIR}/manifest.json ${ASSEMBLY_DIR}
   LogExecute cp ${START_DIR}/background.js ${ASSEMBLY_DIR}
   LogExecute cp ${START_DIR}/icon_16.png ${ASSEMBLY_DIR}
   LogExecute cp ${START_DIR}/icon_48.png ${ASSEMBLY_DIR}
   LogExecute cp ${START_DIR}/icon_128.png ${ASSEMBLY_DIR}
   LogExecute cp ${START_DIR}/emacs.js ${ASSEMBLY_DIR}
   ChangeDir ${PUBLISH_DIR}
-  LogExecute zip -r emacs-24.3.zip emacs
+  CreateWebStoreZip emacs-${VERSION}.zip emacs
 }

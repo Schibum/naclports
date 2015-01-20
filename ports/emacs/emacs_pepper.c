@@ -4,53 +4,64 @@
  * found in the LICENSE file.
  */
 
-#include <assert.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <libtar.h>
-#include <limits.h>
-#include <locale.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "nacl_main.h"
 
-#include "nacl_io/nacl_io.h"
-#include "ppapi_simple/ps_main.h"
+// Some things that Lisp.h needs:
+#include <config.h>
+#include <stdio.h>
+#include <errno.h>
+#include <sys/file.h>
+#include <sys/time.h>
+#include <unistd.h>
+
+#include "lisp.h"
+
+
+// Add some functions for use in the debugger to print out the value
+// of a lisp object.
+
+// Print a human readable type for a Lisp object to the debug console.
+char debug_print_buf[81];
+char* whatis(Lisp_Object object) {
+  debug_print_buf[0] = '\0';
+  debug_print_buf[80] = '\0';
+
+  if (STRINGP(object)) {
+    snprintf(debug_print_buf, 80, "String %s", SSDATA(object));
+    return debug_print_buf;
+  }
+  else if (INTEGERP(object)) {
+    int x = XINT(object);
+    snprintf(debug_print_buf, 80, "Number %d", x);
+    return debug_print_buf;
+  }
+  else if (FLOATP(object)) {
+    struct Lisp_Float* floater = XFLOAT(object);
+    return "It's a float number!";
+  }
+  else if (Qnil == object)
+    return "It's a lisp null";
+  else if (Qt == object)
+    return "It's a lisp 't'";
+  else if (SYMBOLP(object)) {
+    snprintf(debug_print_buf, 80, "Symbol named %s", SYMBOL_NAME(object));
+    return debug_print_buf;
+  }
+  else if (CONSP(object))
+    return "It's a list!";
+  else if (MISCP(object))
+    return "It's a lisp misc!";
+  else if (VECTORLIKEP(object))
+    return "It's some kind of vector like thingie!";
+  else
+    return "I don't know what it is.";
+}
 
 // The special NaCl entry point into emacs.
 extern int nacl_emacs_main(int argc, char *argv[]);
 
-static int setup_unix_environment(const char* tarfile) {
-  // Extra tar achive from http filesystem.
-  if (tarfile) {
-    int ret;
-    TAR* tar;
-    char filename[PATH_MAX];
-    strcpy(filename, "/mnt/http/");
-    strcat(filename, tarfile);
-    ret = tar_open(&tar, filename, NULL, O_RDONLY, 0, 0);
-    if (ret) {
-      printf("error opening %s\n", filename);
-      return 1;
-    }
-
-    ret = tar_extract_all(tar, "/");
-    if (ret) {
-      // TODO(petewil): Remove next line before shipping
-      printf("errno is %d\n", errno);
-      printf("error extracting %s\n", filename);
-      return 1;
-    }
-
-    ret = tar_close(tar);
-    assert(ret == 0);
-  }
-
-  return 0;
-}
-
 int nacl_main(int argc, char* argv[]) {
-  if (setup_unix_environment("emacs.tar"))
+  if (nacl_startup_untar(argv[0], "emacs.tar", "/"))
     return 1;
   return nacl_emacs_main(argc, argv);
 }

@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+EXECUTABLES="tools/fftw-wisdom${NACL_EXEEXT} tests/bench${NACL_EXEEXT}"
+
 # Without these CFLAGS fftw fails to build for ARM
 if [ "${NACL_ARCH}" = "arm" ]; then
   NACLPORTS_CPPFLAGS+=" -fomit-frame-pointer -fstrict-aliasing \
@@ -16,17 +18,15 @@ fi
 ConfigureStep() {
   SetupCrossEnvironment
 
-  local extra=""
   if [ ${NACL_ARCH} = "x86_64" -o ${NACL_ARCH} = "i686" ]; then
-    extra="--enable-sse2"
+    EXTRA_CONFIGURE_ARGS+=" --enable-sse2"
   fi
 
   LogExecute ${SRC_DIR}/configure \
     --host=nacl \
     --prefix=${PREFIX} \
     --enable-threads \
-    ${EXTRA_CONFIGURE_ARGS:-} \
-    ${extra}
+    ${EXTRA_CONFIGURE_ARGS:-}
 }
 
 TestStep() {
@@ -37,36 +37,9 @@ TestStep() {
         WriteSelLdrScriptForPNaCl ${exe_noext} \
             $(basename ${exe_noext}.${arch}.nexe) ${arch}
       done
-      make check
+      make check EXEEXT=
     done
   else
-    make check
+    make check EXEEXT=
   fi
-}
-
-PackageInstall() {
-  RunPreInstallStep
-  RunDownloadStep
-  RunExtractStep
-  RunPatchStep
-
-  # Build fftw (double)
-  EXECUTABLES="tools/fftw-wisdom${NACL_EXEEXT} tests/bench${NACL_EXEEXT}"
-  RunConfigureStep
-  RunBuildStep
-  RunPostBuildStep
-  RunTestStep
-  RunInstallStep
-
-  # build fftwf (float)
-  EXECUTABLES="tools/fftwf-wisdom${NACL_EXEEXT} tests/bench${NACL_EXEEXT}"
-  EXTRA_CONFIGURE_ARGS=--enable-float
-  BUILD_DIR+="-float"
-  RunConfigureStep
-  RunBuildStep
-  RunPostBuildStep
-  RunTestStep
-  RunInstallStep
-
-  PackageStep
 }
