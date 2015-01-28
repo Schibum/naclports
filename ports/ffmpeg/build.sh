@@ -25,7 +25,7 @@ ConfigureStep() {
   else
     extra_args="--arch=x86"
   fi
-  FILTERS="null,scale,resample,movie,amovie,crop,pad,apad,atrim,\
+  FILTERS="copy,null,anull,scale,resample,movie,amovie,crop,pad,apad,atrim,\
     trim,sine,setpts,asetpts,volume,aevalsrc,aeval,aresample,aformat,format"
 
   LogExecute ${SRC_DIR}/configure \
