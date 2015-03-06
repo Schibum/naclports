@@ -1,8 +1,8 @@
 NAME=imagemagick
-VERSION=6.9.0-3
-ARCHIVE_ROOT=ImageMagick-6.9.0-3
-URL=http://www.imagemagick.org/download/ImageMagick-6.9.0-3.tar.bz2
+VERSION=6.9.0-4
+ARCHIVE_ROOT=ImageMagick-6.9.0-4
+URL=https://dl.dropboxusercontent.com/u/7490218/ImageMagick-6.9.0-4.tar.bz2
 LICENSE=CUSTOM:LICENSE
 DEPENDS=(libpng jpeg8d bzip2 zlib)
 DISABLED_LIBC=(bionic)
-SHA1=0a6185be15b4b6b73a827b659ac886b06c724d27
+SHA1=f8d463f24b7b271a941cad999b8f06f5dd0ae0bc

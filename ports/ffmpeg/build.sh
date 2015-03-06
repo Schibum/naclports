@@ -25,8 +25,9 @@ ConfigureStep() {
   else
     extra_args="--arch=x86"
   fi
-  FILTERS="null,scale,resample,movie,amovie,crop,pad,apad,atrim,\
-    trim,sine,setpts,asetpts,volume,aevalsrc,aeval,aresample,aformat,format"
+  FILTERS="copy,null,anull,scale,resample,movie,amovie,crop,pad,apad,atrim,\
+    trim,sine,setpts,asetpts,volume,aevalsrc,aeval,aresample,aformat,format,\
+    amix,overlay"
 
   LogExecute ${SRC_DIR}/configure \
     --cross-prefix=${NACL_CROSS_PREFIX}- \
