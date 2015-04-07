@@ -1,15 +1,3 @@
-diff --git a/configure b/configure
-index 618dfab..2cbdede 100755
---- a/configure
-+++ b/configure
-@@ -4301,7 +4301,6 @@ die_license_disabled gpl libcdio
- die_license_disabled gpl libsmbclient
- die_license_disabled gpl libutvideo
- die_license_disabled gpl libvidstab
--die_license_disabled gpl libx264
- die_license_disabled gpl libx265
- die_license_disabled gpl libxavs
- die_license_disabled gpl libxvid
 diff --git a/ffmpeg.c b/ffmpeg.c
 index ee8039c..b2b8e49 100644
 --- a/ffmpeg.c

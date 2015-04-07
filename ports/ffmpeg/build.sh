@@ -41,6 +41,7 @@ ConfigureStep() {
     --disable-yasm \
     --disable-asm \
     --enable-static \
+    --enable-gpl \
     --enable-libx264 \
     --enable-cross-compile \
     --enable-protocol=file \
