@@ -1,5 +1,5 @@
 NAME=libvpx
-VERSION=v1.2.0
-URL=https://webm.googlecode.com/files/libvpx-v1.2.0.tar.bz2
+VERSION=1.4.0
+URL=https://storage.googleapis.com/downloads.webmproject.org/releases/webm/libvpx-1.4.0.tar.bz2
 LICENSE=GPL2
-SHA1=214d9a215af1a3278d9fcba4cac89566e321e4cf
+SHA1=d05f4e9a9878886282ac9c9246f8fac080c94c8f
