@@ -3,8 +3,7 @@
 # found in the LICENSE file.
 
 export EXTRA_LIBS="${NACL_CLI_MAIN_LIB} \
-  -lppapi_simple \
-  -lnacl_io -lppapi -lppapi_cpp -l${NACL_CPP_LIB}"
+  -lppapi_simple -lnacl_io -lppapi -l${NACL_CXX_LIB}"
 
 EXECUTABLES="tests/devenv_small_test_${NACL_ARCH}${NACL_EXEEXT} \
              jseval/jseval_${NACL_ARCH}${NACL_EXEEXT}"
@@ -74,13 +73,14 @@ InstallStep() {
 
   # Generate a manifest.json.
   GenerateManifest ${START_DIR}/manifest.json.template ${APP_DIR} \
-    ${START_DIR}/key.txt
+    key=$(cat ${START_DIR}/key.txt)
 
   # Create uploadable version (key not included).
   local APP_UPLOAD_DIR="${PUBLISH_DIR}/devenv_app_upload"
   rm -rf ${APP_UPLOAD_DIR}
   LogExecute cp -r ${APP_DIR} ${APP_UPLOAD_DIR}
-  GenerateManifest ${START_DIR}/manifest.json.template ${APP_UPLOAD_DIR}
+  GenerateManifest ${START_DIR}/manifest.json.template \
+    ${APP_UPLOAD_DIR} key=
 
   # Zip the full app for upload.
   ChangeDir ${PUBLISH_DIR}

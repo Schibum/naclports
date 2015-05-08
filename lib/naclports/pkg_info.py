@@ -64,9 +64,12 @@ def ParsePkgInfo(contents, filename, valid_keys=None, required_keys=None):
       return [string.Template(v).substitute(substitutions) for v in value]
 
   for i, line in enumerate(contents.splitlines()):
-    if line[0] == '#':
+    if not line or line[0] == '#':
       continue
     key, raw_value = ParsePkgInfoLine(line, i+1)
+    if key in rtn:
+      raise PkgFormatError('Error parsing %s:%d: duplicate key (%s)' %
+                           (filename, i+1, key))
     rtn[key] = ExpandVars(raw_value, rtn)
 
   for required_key in required_keys:

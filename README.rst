@@ -61,25 +61,22 @@ To build all ports you will also need these:
 - libglib2.0-dev >= 2.26.0 (if you want to build glib)
 - xsltproc
 
-To ensure you have all required packages you can run the
-install-build-deps.sh from the chromium repo.
-
 On Mac OS X you can use homebrew to install these using the following command::
 
   brew install autoconf automake cmake gettext libtool pkg-config
 
 The build system for some of the native Python modules relies on a 32-bit
 host build of Python itself, which in turn relies on the development version
-of zlib and libssl being available.  On 64-bit Ubuntu/Trust this means
+of zlib and libssl being available.  On 64-bit Ubuntu/Trusty this means
 installing:
 
 - zlib1g-dev:i386
 - libssl-dev:i386
 
-On older Debian/Ubuntu systems the packages were called:
+On older Debian/Ubuntu systems these packages were known as:
 
 - lib32z1-dev
-- libssl0.9.8:i
+- libssl0.9.8:i386
 
 
 Building
@@ -127,7 +124,7 @@ licenses before using these packages in your projects.
 
 **Note to Windows users**: These scripts are written in bash and must be
 launched from a Cygwin shell. While many of the scripts should work under
-Cygwin naclports is only tested on Linux and Mac so YMMV.
+Cygwin, naclports is only tested on Linux and Mac so YMMV.
 
 
 Binary Packages
@@ -144,6 +141,15 @@ source.
 
 If you want to force a package to be built from source you can pass
 ``--from-source`` to the naclports script.
+
+
+Emscripten Support
+------------------
+
+The build system contains very early alpha support for building packages
+with Emscripten.  To do requires the Emscripten SDK to be installed and
+configured (with the Emscripten tools in the PATH).  To build for Emscripten
+build with ``TOOLCHAIN=emscripten``.
 
 
 Running the examples
@@ -216,6 +222,7 @@ for this is::
   shellcheck -e SC2044,SC2129,SC2046,SC2035,SC2034,SC2086,SC2148 \
     `git ls-files "*.sh"`
 
+
 Modifying package sources / Working with patches
 ------------------------------------------------
 
@@ -235,5 +242,19 @@ To make changes to a package's patch file the recommended workflow is:
 Whenever the upstream archive or patch file changes and you try to build the
 package you will be prompted to remove the existing repository and start a new
 one. This is to avoid deleting a repository that might contain unsaved changed.
+
+
+Coding Style
+------------
+
+For code that is authored in the naclports repository (as opposed to patches)
+we follow the Chromium style guide:
+http://www.chromium.org/developers/coding-style.
+
+C/C++ code can be automatically formatted with Chromium's clang-format:
+https://code.google.com/p/chromium/wiki/ClangFormat. If you have checkout of
+Chromium you can set CHROMIUM_BUILDTOOLS_PATH=<chromium>/src/buildtools
+which will enable the clang-format script in depot_tools to find the binary.
+
 
 Happy porting!

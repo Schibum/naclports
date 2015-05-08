@@ -14,7 +14,7 @@ BuildStep() {
   export NACL_LDFLAGS="${NACLPORTS_LDFLAGS}"
   export WINTTYLIB="${NACL_CLI_MAIN_LIB}"
   WINTTYLIB+=" -lncurses -ltar -lppapi_simple -lnacl_io"
-  WINTTYLIB+=" -lppapi -lppapi_cpp -l${NACL_CPP_LIB}"
+  WINTTYLIB+=" -lppapi -l${NACL_CXX_LIB}"
   if [ "${NACL_LIBC}" = "newlib" ]; then
     export WINTTYLIB="${WINTTYLIB} -lglibc-compat"
     export NACL_CCFLAGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat"
@@ -23,8 +23,8 @@ BuildStep() {
   export NACLPORTS_INCLUDE
   export STRNCMPI=1
   cp ${START_DIR}/nethack_pepper.c ${SRC_DIR}/src
-  bash sys/unix/setup.sh
-  make
+  LogExecute bash sys/unix/setup.sh
+  LogExecute make
 }
 
 InstallStep() {

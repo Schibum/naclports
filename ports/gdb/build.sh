@@ -87,13 +87,14 @@ PublishStep() {
 
   # Generate a manifest.json (with key included).
   GenerateManifest ${START_DIR}/manifest.json.template \
-    ${GDB_APP_DIR} ${START_DIR}/key.txt
+    ${GDB_APP_DIR} key=$(cat ${START_DIR}/key.txt)
 
   # Create uploadable version (key not included).
   local GDB_APP_UPLOAD_DIR="${PUBLISH_DIR}/gdb_app_upload"
   rm -rf ${GDB_APP_UPLOAD_DIR}
   LogExecute cp -r ${GDB_APP_DIR} ${GDB_APP_UPLOAD_DIR}
-  GenerateManifest ${START_DIR}/manifest.json.template ${GDB_APP_UPLOAD_DIR}
+  GenerateManifest ${START_DIR}/manifest.json.template \
+    ${GDB_APP_UPLOAD_DIR} key=
   # Zip for upload to the web store.
   pushd ${PUBLISH_DIR}
   rm -f gdb_app_upload.zip
@@ -114,7 +115,7 @@ PublishStep() {
   LogExecute cp ${START_DIR}/extension/main.html ${DEBUG_EXT_DIR}
   LogExecute cp ${START_DIR}/extension/main.js ${DEBUG_EXT_DIR}
   GenerateManifest ${START_DIR}/extension/manifest.json.template \
-    ${DEBUG_EXT_DIR}
+    ${DEBUG_EXT_DIR} key=
 
   # Zip for upload to the web store.
   pushd ${PUBLISH_DIR}

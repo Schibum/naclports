@@ -4,7 +4,7 @@
 
 import os
 
-from naclports.util import Trace, Log, Warn
+from naclports.util import Log, Warn, LogVerbose
 from naclports.error import Error
 from naclports import configuration, pkg_info, util
 
@@ -68,6 +68,10 @@ class Package(object):
         raise Error('%s: invalid libc: %s' % (self.info, libc))
 
     for toolchain in self.DISABLED_TOOLCHAIN:
+      if '/' in toolchain:
+        toolchain, arch = toolchain.split('/')
+        if arch not in util.arch_to_pkgarch:
+          raise Error('%s: invalid architecture: %s' % (self.info, arch))
       if toolchain not in configuration.VALID_TOOLCHAINS:
         raise Error('%s: invalid toolchain: %s' % (self.info, toolchain))
 
@@ -160,12 +164,12 @@ class InstalledPackage(Package):
 
       root = util.GetInstallRoot(self.config)
       for filename in self.Files():
-        filename = os.path.join(root, filename)
-        if not os.path.lexists(filename):
-          Warn('File not found while uninstalling: %s' % filename)
+        fullname = os.path.join(root, filename)
+        if not os.path.lexists(fullname):
+          Warn('File not found while uninstalling: %s' % fullname)
           continue
-        Trace('rm %s' % filename)
-        RemoveFile(filename)
+        LogVerbose('uninstall: %s' % filename)
+        RemoveFile(fullname)
 
       RemoveFile(self.GetListFile())
 

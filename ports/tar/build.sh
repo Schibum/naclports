@@ -3,7 +3,7 @@
 # found in the LICENSE file.
 
 export EXTRA_LIBS="${NACL_CLI_MAIN_LIB} -lppapi_simple -lnacl_io -lppapi \
--lppapi_cpp -l${NACL_CPP_LIB}"
+-l${NACL_CXX_LIB}"
 EXECUTABLES=src/tar
 
 # The default when cross compiling is to assume chown does not
@@ -16,7 +16,12 @@ if [ "${NACL_LIBC}" = "newlib" ]; then
   export LIBS="-lglibc-compat"
 fi
 
-InstallStep() {
+if [ "${TOOLCHAIN}" = "pnacl" -o "${TOOLCHAIN}" = "clang-newlib" ]; then
+  # correctly handle 'extern inline'
+  NACLPORTS_CPPFLAGS+=" -std=gnu89"
+fi
+
+PublishStep() {
   MakeDir ${PUBLISH_DIR}
   cp src/tar ${PUBLISH_DIR}/tar_${NACL_ARCH}${NACL_EXEEXT}
   pushd ${PUBLISH_DIR}

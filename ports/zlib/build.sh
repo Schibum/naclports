@@ -13,6 +13,8 @@ fi
 ConfigureStep() {
   LogExecute rm -f libz.*
   SetupCrossEnvironment
+  CFLAGS="${CPPFLAGS} ${CFLAGS}"
+  CXXFLAGS="${CPPFLAGS} ${CXXFLAGS}"
   CHOST=${NACL_CROSS_PREFIX} LogExecute ./configure --prefix="${PREFIX}"
 }
 
@@ -66,6 +68,8 @@ TestStep() {
     TranslateAndWriteSelLdrScript "${example_pexe}" x86-64 \
       example.x86-64.nexe "${example_script}"
     RunExample
+  elif [ "${NACL_ARCH}" = "emscripten" ]; then
+    return
   else
     RunMinigzip
     RunExample

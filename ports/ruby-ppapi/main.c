@@ -11,7 +11,11 @@
 
 #ifdef __x86_64__
 #define NACL_ARCH "x86_64"
-#elif defined __i686__
+#elif defined __i386__
+/*
+ * Use __i386__ rather then __i686__ since the latter is not defined
+ * by i686-nacl-clang.
+ */
 #define NACL_ARCH "x86_32"
 #elif defined __arm__
 #define NACL_ARCH "arm"
@@ -23,7 +27,7 @@
 
 #define DATA_ARCHIVE "rbdata-" NACL_ARCH ".tar"
 
-int nacl_main(int argc, char **argv) {
+int nacl_main(int argc, char** argv) {
   if (nacl_startup_untar(argv[0], DATA_ARCHIVE, "/"))
     return -1;
 

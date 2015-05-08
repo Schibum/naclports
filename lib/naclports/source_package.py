@@ -5,7 +5,6 @@
 import contextlib
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -18,7 +17,7 @@ from naclports import package
 from naclports import package_index
 from naclports import util
 from naclports import paths
-from naclports.util import Log, Trace
+from naclports.util import Log, Trace, LogVerbose
 from naclports.error import Error, DisabledError, PkgFormatError
 
 
@@ -53,7 +52,7 @@ def FormatTimeDelta(delta):
   Args:
     delta: the amount of time in seconds.
 
-  Returns: A string desribing the ammount of time passed in.
+  Returns: A string describing the amount of time passed in.
   """
   rtn = ''
   if delta >= 60:
@@ -74,13 +73,13 @@ def ExtractArchive(archive, destination):
     cmd = ['unzip', '-q', '-d', destination, archive]
   else:
     raise Error('unhandled extension: %s' % ext)
-  Trace(cmd)
+  LogVerbose(cmd)
   subprocess.check_call(cmd)
 
 
 def RunGitCmd(directory, cmd, error_ok=False):
   cmd = ['git'] + cmd
-  Trace('%s' % ' '.join(cmd))
+  LogVerbose('%s' % ' '.join(cmd))
   p = subprocess.Popen(cmd,
                        cwd=directory,
                        stderr=subprocess.PIPE,
@@ -92,21 +91,29 @@ def RunGitCmd(directory, cmd, error_ok=False):
     if stderr:
       Log(stderr)
     raise Error('git command failed: %s' % cmd)
+  Trace('git exited with %d' % p.returncode)
   return p.returncode
 
 
 def InitGitRepo(directory):
-  """Initialise the source git repository for a given package direcotry.
+  """Initialize the source git repository for a given package directory.
 
   This function works for unpacked tar files as well as cloned git
   repositories.  It sets up an 'upstream' branch pointing and the
-  pestine upstream sources and a 'master' bracnh will contain changes
+  pristine upstream sources and a 'master' branch will contain changes
   specific to naclports (normally the result of applying nacl.patch).
 
   Args:
-    directory: Direcotory containing unpacked package sources.
+    directory: Directory containing unpacked package sources.
   """
-  if os.path.exists(os.path.join(directory, '.git')):
+  git_dir = os.path.join(directory, '.git')
+
+  # If the upstream ref exists then we've already initialized this repo
+  if os.path.exists(os.path.join(git_dir, 'refs', 'heads', 'upstream')):
+    return
+
+  if os.path.exists(git_dir):
+    Log('Init existing git repo: %s' % directory)
     RunGitCmd(directory, ['checkout', '-b', 'placeholder'])
     RunGitCmd(directory, ['branch', '-D', 'upstream'], error_ok=True)
     RunGitCmd(directory, ['branch', '-D', 'master'], error_ok=True)
@@ -114,15 +121,22 @@ def InitGitRepo(directory):
     RunGitCmd(directory, ['checkout', '-b', 'master'])
     RunGitCmd(directory, ['branch', '-D', 'placeholder'])
   else:
+    Log('Init new git repo: %s' % directory)
     RunGitCmd(directory, ['init'])
-    # Setup a bogus identity on the buildbots.
-    if os.environ.get('BUILDBOT_BUILDERNAME'):
-      RunGitCmd(directory, ['config', 'user.name', 'Naclports'])
-      RunGitCmd(directory, ['config', 'user.email', 'nobody@example.com'])
-    RunGitCmd(directory, ['add', '-f', '.'])
-    RunGitCmd(directory, ['commit', '-m', 'Upstream version'])
-    RunGitCmd(directory, ['checkout', '-b', 'upstream'])
-    RunGitCmd(directory, ['checkout', 'master'])
+    try:
+      # Setup a bogus identity on the buildbots.
+      if os.environ.get('BUILDBOT_BUILDERNAME'):
+        RunGitCmd(directory, ['config', 'user.name', 'Naclports'])
+        RunGitCmd(directory, ['config', 'user.email', 'nobody@example.com'])
+      RunGitCmd(directory, ['add', '-f', '.'])
+      RunGitCmd(directory, ['commit', '-m', 'Upstream version'])
+      RunGitCmd(directory, ['checkout', '-b', 'upstream'])
+      RunGitCmd(directory, ['checkout', 'master'])
+    except: # pylint: disable=bare-except
+      # If git setup fails or is interrupted then remove the partially
+      # initialized repository.
+      util.RemoveTree(os.path.join(git_dir))
+
 
 
 def WriteStamp(stamp_file, stamp_contents):
@@ -206,7 +220,7 @@ class SourcePackage(package.Package):
     # for pnacl toolchain and arch are the same
     if self.config.toolchain != self.config.arch:
       fullname.append(self.config.toolchain)
-    if os.environ.get('NACL_DEBUG') == '1':
+    if self.config.debug:
       fullname.append('debug')
     return '_'.join(fullname) + '.tar.bz2'
 
@@ -258,8 +272,9 @@ class SourcePackage(package.Package):
       self.Build(build_deps, force)
 
     if self.IsAnyVersionInstalled():
-      self.LogStatus('Uninstalling existing')
-      self.GetInstalledPackage().DoUninstall()
+      installed_pkg = self.GetInstalledPackage()
+      installed_pkg.LogStatus('Uninstalling existing')
+      installed_pkg.DoUninstall()
 
     binary_package.BinaryPackage(package_file).Install()
 
@@ -281,7 +296,7 @@ class SourcePackage(package.Package):
 
     self.LogStatus('Building')
 
-    if util.verbose:
+    if util.log_level > util.LOG_INFO:
       log_filename = None
     else:
       log_filename = os.path.join(log_root, '%s_%s.log' % (self.NAME,
@@ -293,15 +308,15 @@ class SourcePackage(package.Package):
     with util.BuildLock():
       try:
         with RedirectStdoutStderr(log_filename):
-          old_verbose = util.verbose
+          old_log_level = util.log_level
+          util.log_level = util.LOG_VERBOSE
           try:
-            util.verbose = True
             self.Download()
             self.Extract()
             self.Patch()
             self.RunBuildSh()
           finally:
-            util.verbose = old_verbose
+            util.log_level = old_log_level
       except:
         if log_filename:
           with open(log_filename) as log_file:
@@ -320,6 +335,8 @@ class SourcePackage(package.Package):
     env['NACL_ARCH'] = self.config.arch
     env['NACL_DEBUG'] = self.config.debug and '1' or '0'
     env['NACL_SDK_ROOT'] = util.GetSDKRoot()
+    if self.config.toolchain == 'emscripten':
+      env['EMSCRIPTEN'] = util.GetEmscriptenRoot()
     rtn = subprocess.call(cmd,
                           stdout=sys.stdout,
                           stderr=sys.stderr,
@@ -356,8 +373,7 @@ class SourcePackage(package.Package):
 
     stamp_dir = os.path.join(paths.STAMP_DIR, self.NAME)
     Log('removing %s' % stamp_dir)
-    if os.path.exists(stamp_dir):
-      shutil.rmtree(stamp_dir)
+    util.RemoveTree(stamp_dir)
 
   def Extract(self):
     """Extract the package archive into its build location.
@@ -396,10 +412,10 @@ class SourcePackage(package.Package):
       src = os.path.join(tmp_output_path, new_foldername)
       if not os.path.isdir(src):
         raise Error('Archive contents not found: %s' % src)
-      Trace("renaming '%s' -> '%s'" % (src, dest))
+      LogVerbose("renaming '%s' -> '%s'" % (src, dest))
       os.rename(src, dest)
     finally:
-      shutil.rmtree(tmp_output_path)
+      util.RemoveTree(tmp_output_path)
 
     self.RemoveStamps()
     WriteStamp(stamp_file, stamp_contents)
@@ -432,19 +448,15 @@ class SourcePackage(package.Package):
     if os.path.exists(stamp_file):
       self.Log('Skipping patch step (cleaning source tree)')
       cmd = ['git', 'clean', '-f', '-d']
-      if not util.verbose:
+      if not util.log_level > util.LOG_INFO:
         cmd.append('-q')
       self.RunCmd(cmd)
       return
 
     util.LogHeading('Patching')
-    Log('Init git repo: %s' % src_dir)
-    try:
-      InitGitRepo(src_dir)
-    except subprocess.CalledProcessError as e:
-      raise Error(e)
+    InitGitRepo(src_dir)
     if os.path.exists(self.GetPatchFile()):
-      Trace('applying patch to: %s' % src_dir)
+      LogVerbose('applying patch to: %s' % src_dir)
       cmd = ['patch', '-p1', '-g0', '--no-backup-if-mismatch']
       with open(self.GetPatchFile()) as f:
         self.RunCmd(cmd, stdin=f)
@@ -479,12 +491,20 @@ class SourcePackage(package.Package):
       raise DisabledError('%s: cannot be built with %s'
                           % (self.NAME, self.config.libc))
 
-    if self.config.toolchain in self.DISABLED_TOOLCHAIN:
-      raise DisabledError('%s: cannot be built with %s'
-                          % (self.NAME, self.config.toolchain))
+    for disabled_toolchain in self.DISABLED_TOOLCHAIN:
+      if '/' in disabled_toolchain:
+        disabled_toolchain, arch = disabled_toolchain.split('/')
+        if (self.config.arch == arch and
+            self.config.toolchain == disabled_toolchain):
+          raise DisabledError('%s: cannot be built with %s for %s'
+                              % (self.NAME, self.config.toolchain, arch))
+      else:
+        if self.config.toolchain == disabled_toolchain:
+          raise DisabledError('%s: cannot be built with %s'
+                              % (self.NAME, self.config.toolchain))
 
     if self.config.arch in self.DISABLED_ARCH:
-      raise DisabledError('%s: disabled for current arch: %s'
+      raise DisabledError('%s: disabled for architecture: %s'
                           % (self.NAME, self.config.arch))
 
     if self.MIN_SDK_VERSION is not None:
@@ -494,7 +514,7 @@ class SourcePackage(package.Package):
 
     if self.ARCH is not None:
       if self.config.arch not in self.ARCH:
-        raise DisabledError('%s: disabled for current arch: %s'
+        raise DisabledError('%s: disabled for architecture: %s'
                             % (self.NAME, self.config.arch))
 
     for conflicting_package in self.CONFLICTS:
@@ -685,7 +705,7 @@ class SourcePackage(package.Package):
 
 
 def SourcePackageIterator():
-  """Iterator which yields a Package object for each naclport package."""
+  """Iterator which yields a Package object for each naclports package."""
   ports_root = os.path.join(paths.NACLPORTS_ROOT, 'ports')
   for root, _, files in os.walk(ports_root):
     if 'pkg_info' in files:

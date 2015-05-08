@@ -7,8 +7,10 @@
 /* Define a typical entry point for command line tools spawned by bash
  * (e.g., ls, objdump, and objdump). */
 
-#include "ppapi_simple/ps_main.h"
+#include "nacl_io/nacl_io.h"
 #include "nacl_main.h"
+#include "ppapi_simple/ps.h"
+#include "ppapi_simple/ps_main.h"
 
 int cli_main(int argc, char* argv[]) {
   nacl_setup_env();

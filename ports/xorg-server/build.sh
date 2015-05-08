@@ -23,6 +23,7 @@ EXTRA_CONFIGURE_ARGS+=" --enable-shared=no"
 EXTRA_CONFIGURE_ARGS+=" --enable-unit-tests=no"
 EXTRA_CONFIGURE_ARGS+=" --enable-ipv6=no"
 EXTRA_CONFIGURE_ARGS+=" --datarootdir=/share"
+EXTRA_CONFIGURE_ARGS+=" --with-fontrootdir=/share/fonts/X11"
 EXTRA_CONFIGURE_ARGS+=" --with-xkb-bin-directory="
 
 if [ "${NACL_LIBC}" = "newlib" ]; then
@@ -32,13 +33,13 @@ fi
 
 NACLPORTS_CFLAGS+=" -Dmain=SDL_main"
 export LIBS+="\
--Wl,--undefined=nacl_main \
 -Wl,--undefined=SDL_main \
--lSDLmain -lSDL \
+-Wl,--undefined=nacl_startup_untar \
 ${NACL_CLI_MAIN_LIB} \
+-lSDLmain -lSDL \
 -lppapi_simple -ltar -lnacl_io -lRegal -lglslopt \
--lppapi -lppapi_cpp -lppapi_gles2 -lm \
--l${NACL_CPP_LIB}"
+-lppapi -lppapi_gles2 -lm \
+-l${NACL_CXX_LIB}"
 
 if [ "${NACL_LIBC}" = "newlib" ]; then
   NACLPORTS_CFLAGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat"
@@ -107,6 +108,8 @@ InstallStep() {
 
   ChangeDir ${NACL_PREFIX}
   LogExecute tar cvf ${ASSEMBLY_DIR}/xorg-xkb.tar share/X11/xkb
+  local XFONTS_DIR=${NACL_PACKAGES_PUBLISH}/xfonts/${TOOLCHAIN}
+  LogExecute cp ${XFONTS_DIR}/xorg-fonts.tar ${ASSEMBLY_DIR}/xorg-fonts.tar
 
   ChangeDir ${PUBLISH_DIR}
   LogExecute zip -r xorg-server.zip xorg-server

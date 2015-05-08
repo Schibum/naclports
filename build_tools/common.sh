@@ -56,13 +56,17 @@ readonly PREFIX=/naclports-dummydir
 NACLPORTS_CFLAGS=""
 NACLPORTS_CXXFLAGS=""
 NACLPORTS_CPPFLAGS="${NACL_CPPFLAGS}"
-
-# For the library path we always explicitly add to the link flags
-# otherwise 'libtool' won't find the libraries correctly.  This
-# is because libtool uses 'gcc -print-search-dirs' which does
-# not honor the external specs file.
 NACLPORTS_LDFLAGS="${NACL_LDFLAGS}"
-NACLPORTS_LDFLAGS+=" -L${NACLPORTS_LIBDIR} -Wl,-rpath-link=${NACLPORTS_LIBDIR}"
+
+# i686-nacl-clang doesn't currently know about i686-nacl/usr/include
+# or i686-nacl/usr/lib.  Instead it shared the headers with x86_64
+# and uses x86_64-nacl/usr/lib32.
+# TODO(sbc): remove this once we fix:
+# https://code.google.com/p/nativeclient/issues/detail?id=4108
+if [ "${TOOLCHAIN}" = "clang-newlib" -a "${NACL_ARCH}" = "i686" ]; then
+  NACLPORTS_CPPFLAGS+=" -isystem ${NACLPORTS_INCLUDE}"
+  NACLPORTS_LDFLAGS+=" -L${NACLPORTS_LIBDIR}"
+fi
 
 # The NaCl version of ARM gcc emits warnings about va_args that
 # are not particularly useful
@@ -95,8 +99,7 @@ fi
 # libcli_main.a has a circular dependency which makes static link fail
 # (cli_main => nacl_io => ppapi_cpp => cli_main). To break this loop,
 # you should use this instead of -lcli_main.
-export NACL_CLI_MAIN_LIB="-Xlinker -uPSUserCreateInstance \
-  -lcli_main -lnacl_spawn"
+export NACL_CLI_MAIN_LIB="-Xlinker -uPSUserMainGet -lcli_main -lnacl_spawn"
 
 # Python variables
 NACL_PYSETUP_ARGS=""
@@ -124,7 +127,7 @@ else
   PACKAGE_SUFFIX="_${NACL_ARCH}"
 fi
 
-if [ "${NACL_ARCH}" != "pnacl" ]; then
+if [ "${NACL_ARCH}" != "pnacl" -a "${NACL_ARCH}" != "emscripten" ]; then
   PACKAGE_SUFFIX+=_${TOOLCHAIN}
 fi
 
@@ -139,12 +142,18 @@ PACKAGE_FILE=${NACL_PACKAGES_ROOT}/${NAME}_${VERSION}${PACKAGE_SUFFIX}.tar.bz2
 
 NACLPORTS_QUICKBUILD=${NACLPORTS_QUICKBUILD:-0}
 
-if [ "${OS_NAME}" = "Darwin" ]; then
-  OS_JOBS=4
-elif [ "${OS_NAME}" = "Linux" ]; then
-  OS_JOBS=$(nproc)
-else
-  OS_JOBS=1
+# Number of simultaneous jobs to run during parallel build.
+# Setting OS_JOBS=1 in the envrionment can be useful when debugging
+# build failures in building system that interleave the output of
+# of different jobs.
+if [ -z "${OS_JOBS:-}" ]; then
+  if [ "${OS_NAME}" = "Darwin" ]; then
+    OS_JOBS=4
+  elif [ "${OS_NAME}" = "Linux" ]; then
+    OS_JOBS=$(nproc)
+  else
+    OS_JOBS=1
+  fi
 fi
 
 GomaTest() {
@@ -163,7 +172,9 @@ GomaTest() {
 
 # If NACL_GOMA is defined then we check for goma and use it if its found.
 if [ -n "${NACL_GOMA:-}" ]; then
-  if [ "${NACL_ARCH}" != "pnacl" -a "${NACL_ARCH}" != "arm" ]; then
+  if [ "${NACL_ARCH}" != "pnacl" -a
+    "${NACL_ARCH}" != "arm" -a
+    "${NACL_ARCH}" != "emscripten"]; then
     # Assume that if CC is good then so is CXX since GomaTest is actually
     # quite slow
     if GomaTest "${NACLCC}"; then
@@ -379,6 +390,13 @@ PatchSpecsFile() {
   if [ "${NACL_SHARED}" != "1" ]; then
     sed -i.bak "s/%{shared:-shared/%{shared:%e${ERROR_MSG}/" "${SPECS_FILE}"
   fi
+
+  # For the library path we always explicitly add to the link flags
+  # otherwise 'libtool' won't find the libraries correctly.  This
+  # is because libtool uses 'gcc -print-search-dirs' which does
+  # not honor the external specs file.
+  NACLPORTS_LDFLAGS+=" -L${NACLPORTS_LIBDIR}"
+  NACLPORTS_LDFLAGS+=" -Wl,-rpath-link=${NACLPORTS_LIBDIR}"
 }
 
 
@@ -542,9 +560,13 @@ Fetch() {
 }
 
 
-Check() {
-  # verify sha1 checksum for tarball
-  if echo "${SHA1} *${ARCHIVE_NAME}" | "${SHA1CHECK}"; then
+#
+# verify the sha1 checksum of given file
+# $1 - filename
+# $2 - checksum (as hex string)
+#
+CheckHash() {
+  if echo "$2 *$1" | "${SHA1CHECK}"; then
     return 0
   else
     return 1
@@ -811,15 +833,10 @@ GenerateManifest() {
     exit 1
   fi
 
-  if [ $# -gt 0 ]; then
-    local KEY="$(cat $1)"
-  else
-    local KEY=""
-  fi
   echo "Expanding ${SOURCE_FILE} > ${TARGET_DIR}/manifest.json"
   # Generate a manifest.json
   "${TEMPLATE_EXPAND}" "${SOURCE_FILE}" \
-    version=${REVISION} key="${KEY}" > ${TARGET_DIR}/manifest.json
+    version=${REVISION} $* > ${TARGET_DIR}/manifest.json
 }
 
 
@@ -958,6 +975,14 @@ DefaultConfigureStep() {
     return
   fi
 
+  if [ "${TOOLCHAIN}" = "emscripten" ]; then
+    # This is a variable the emconfigure sets, presumably to make configure
+    # tests do the right thing.
+    # TODO(sbc): We should probably call emconfigure instead of trying to
+    # duplicate its functionality.
+    export EMMAKEN_JUST_CONFIGURE=1
+  fi
+
   if IsAutoconfProject; then
     ConfigureStep_Autoconf
   elif IsCMakeProject; then
@@ -974,6 +999,8 @@ ConfigureStep_Autoconf() {
   SetupCrossEnvironment
 
   local conf_host=${NACL_CROSS_PREFIX}
+  # TODO(gdeepti): Investigate whether emscripten accurately fits this case for
+  # long term usage.
   if [ "${NACL_ARCH}" = "pnacl" -o "${NACL_ARCH}" = "emscripten" ]; then
     # The PNaCl tools use "pnacl-" as the prefix, but config.sub
     # does not know about "pnacl".  It only knows about "le32-nacl".
@@ -1023,6 +1050,7 @@ ConfigureStep_CMake() {
   SetupCrossPaths
   export CFLAGS="${NACLPORTS_CPPFLAGS} ${NACLPORTS_CFLAGS}"
   export CXXFLAGS="${NACLPORTS_CPPFLAGS} ${NACLPORTS_CXXFLAGS}"
+  export LDFLAGS="${NACLPORTS_LDFLAGS}"
   LogExecute cmake "${SRC_DIR}" \
            -DCMAKE_TOOLCHAIN_FILE=${TOOLS_DIR}/XCompile-nacl.cmake \
            -DNACLAR=${NACLAR} \
@@ -1272,7 +1300,7 @@ LIB_PATH_DEFAULT=${NACL_SDK_LIBDIR}:${NACLPORTS_LIBDIR}
 LIB_PATH_DEFAULT=\${LIB_PATH_DEFAULT}:\${NACL_SDK_LIB}:\${SCRIPT_DIR}
 SEL_LDR_LIB_PATH=\${SEL_LDR_LIB_PATH}:\${LIB_PATH_DEFAULT}
 
-"\${SEL_LDR}" -E TERM=$TERM -a -B "\${IRT}" -- \\
+"\${SEL_LDR}" -E PATH="/bin:/usr/bin" -E TERM=\${TERM} -a -B "\${IRT}" -- \\
     "\${NACL_SDK_LIB}/runnable-ld.so" --library-path "\${SEL_LDR_LIB_PATH}" \\
     "\${SCRIPT_DIR}/$2" "\$@"
 HERE
@@ -1288,7 +1316,8 @@ fi
 SEL_LDR=${NACL_SEL_LDR}
 IRT=${NACL_IRT_PATH}
 
-"\${SEL_LDR}" -E TERM=\${TERM} -a -B "\${IRT}" -- "\${SCRIPT_DIR}/$2" "\$@"
+"\${SEL_LDR}" -E PATH="/bin:/usr/bin" -E TERM=\${TERM} -a -B "\${IRT}" -- \\
+    "\${SCRIPT_DIR}/$2" "\$@"
 HERE
   fi
   chmod 750 "$1"
@@ -1347,7 +1376,8 @@ SCRIPT_DIR=\$(dirname "\${BASH_SOURCE[0]}")
 SEL_LDR=${nacl_sel_ldr}
 IRT=${irt_core}
 
-"\${SEL_LDR}" -a -B "\${IRT}" -- "\${SCRIPT_DIR}/${nexe_name}" "\$@"
+"\${SEL_LDR}" -E PATH="/bin:/usr/bin" -E TERM=\${TERM} -a -B "\${IRT}" -- \\
+    "\${SCRIPT_DIR}/${nexe_name}" "\$@"
 HERE
   chmod 750 "${script_name}"
   echo "Wrote script ${PWD}/${script_name}"

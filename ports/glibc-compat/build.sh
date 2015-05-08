@@ -16,7 +16,7 @@ ConfigureStep() {
 }
 
 BuildStep() {
-  if [ "${TOOLCHAIN}" = "bionic" ]; then
+  if [ "${TOOLCHAIN}" = "bionic" -o "${TOOLCHAIN}" = "emscripten" ]; then
     return
   fi
   # export the nacl tools
@@ -26,11 +26,13 @@ BuildStep() {
   export NACL_SDK_VERSION
   export NACL_SDK_ROOT
   export LDFLAGS=${NACLPORTS_LDFLAGS}
+  export CPPFLAGS=${NACLPORTS_CPPFLAGS}
+  export CFLAGS=${NACLPORTS_CFLAGS}
   DefaultBuildStep
 }
 
 TestStep() {
-  if [ "${TOOLCHAIN}" = "bionic" ]; then
+  if [ "${TOOLCHAIN}" = "bionic" -o "${TOOLCHAIN}" = "emscripten" ]; then
     return
   fi
   if [ "${TOOLCHAIN}" = "pnacl" ]; then

@@ -63,6 +63,8 @@ if [ "${TOOLCHAIN}" = "bionic" ]; then
   DEFAULT_ARCH=arm
 elif [ "${TOOLCHAIN}" = "pnacl" ]; then
   DEFAULT_ARCH=pnacl
+elif [ "${TOOLCHAIN}" = "emscripten" ]; then
+  DEFAULT_ARCH=emscripten
 else
   if [ "${HOST_IS_32BIT}" = "1" ]; then
     DEFAULT_ARCH=i686
@@ -94,16 +96,16 @@ fi
 # Check TOOLCHAIN
 if [ ${TOOLCHAIN} != "newlib" -a ${TOOLCHAIN} != "pnacl" -a \
      ${TOOLCHAIN} != "glibc" -a ${TOOLCHAIN} != "bionic" -a \
-     ${TOOLCHAIN} != "clang-newlib" ]; then
+     ${TOOLCHAIN} != "clang-newlib" -a ${TOOLCHAIN} != "emscripten" ]; then
   echo "Unknown value for TOOLCHAIN: '${TOOLCHAIN}'" 1>&2
   exit -1
 fi
 
-if [ "${NACL_ARCH}" = "emscripten" -a -z "${PEPPERJS_SRC_ROOT:-}" ]; then
+if [ "${NACL_ARCH}" = "emscripten" -a -z "${EMSCRIPTEN:-}" ]; then
   echo "-------------------------------------------------------------------"
-  echo "PEPPERJS_SRC_ROOT is unset."
+  echo "EMSCRIPTEN is unset."
   echo "This environment variable needs to be pointed at some version of"
-  echo "the pepper.js repository."
+  echo "the emscripten repository."
   echo "NOTE: set this to an absolute path."
   echo "-------------------------------------------------------------------"
   exit -1
@@ -126,6 +128,12 @@ if [ "${TOOLCHAIN}" = "glibc" ]; then
     exit -1
   fi
   NACL_LIBC=glibc
+elif [ "${TOOLCHAIN}" = "emscripten" ]; then
+  if [ "${NACL_ARCH}" != "emscripten" ]; then
+    echo "emscripten does not support this architecture: ${NACL_ARCH}" 1>&2
+    exit -1
+  fi
+  NACL_LIBC=emscripten
 elif [ "${TOOLCHAIN}" = "bionic" ]; then
   if [ "${NACL_ARCH}" != "arm" ]; then
     echo "Bionic toolchain only supports ARM" 1>&2
@@ -226,7 +234,7 @@ InitializeNaClGccToolchain() {
 
 InitializeEmscriptenToolchain() {
   local TC_ROOT=${NACL_SDK_ROOT}/toolchain
-  local EM_ROOT=${PEPPERJS_SRC_ROOT}/emscripten
+  local EM_ROOT=${EMSCRIPTEN}
 
   # The PNaCl toolchain moved in pepper_31.  Check for
   # the existence of the old folder first and use that
@@ -253,8 +261,6 @@ InitializeEmscriptenToolchain() {
   NACL_EXEEXT=".js"
 
   LLVM=${TC_ROOT}/bin
-
-  NACL_SDK_LIBDIR="${PEPPERJS_SRC_ROOT}/lib/${TOOLCHAIN}"
 }
 
 InitializePNaClToolchain() {
@@ -286,7 +292,7 @@ InitializePNaClToolchain() {
     NACL_EXEEXT=".nexe"
     NACL_SDK_LIBDIR="${NACL_SDK_ROOT}/lib/${TOOLCHAIN}_${NACL_ARCH_ALT}"
   else
-    # TODO(sbc): figure our why we do not have a pnacl-string
+    # TODO(sbc): figure our why we do not have a pnacl-strings
     #NACLSTRINGS=${NACL_BIN_PATH}/pnacl-strings
     # until then use the host's strings tool
     # (used only by the cairo package)
@@ -332,9 +338,9 @@ NACL_SDK_VERSION=$(${NACL_SDK_ROOT}/tools/getos.py --sdk-version)
 # As of version 33 the PNaCl C++ standard library is LLVM's libc++,
 # others use GCC's libstdc++.
 if [ "${TOOLCHAIN}" = "pnacl" -o "${TOOLCHAIN}" = "clang-newlib" ]; then
-  export NACL_CPP_LIB="c++"
+  export NACL_CXX_LIB="c++"
 else
-  export NACL_CPP_LIB="stdc++"
+  export NACL_CXX_LIB="stdc++"
 fi
 
 if [ "${NACL_DEBUG:-}" = "1" ]; then
@@ -352,21 +358,9 @@ if [ "${TOOLCHAIN}" = "glibc" ]; then
 fi
 
 if [ "${NACL_ARCH}" = "pnacl" ]; then
-  if [ -d ${NACL_TOOLCHAIN_ROOT}/le32-nacl ]; then
-    NACL_SDK_REVISION=$(${NACL_SDK_ROOT}/tools/getos.py --sdk-revision)
-    if [ "${NACL_SDK_VERSION}" -lt 40 ]; then
-      # pepper_39 shiped with le32-nacl/local in is default search path
-      readonly NACL_PREFIX=${NACL_TOOLCHAIN_ROOT}/le32-nacl/local
-    else
-      readonly NACL_PREFIX=${NACL_TOOLCHAIN_ROOT}/le32-nacl/usr
-    fi
-  else
-    # pre-pepper_39 used /usr/local
-    # TODO: remove this once pepper_39 is stable.
-    readonly NACL_PREFIX=${NACL_TOOLCHAIN_ROOT}/usr/local
-  fi
+  readonly NACL_PREFIX=${NACL_TOOLCHAIN_ROOT}/le32-nacl/usr
 elif [ "${NACL_ARCH}" = "emscripten" ]; then
-  readonly NACL_PREFIX=${NACL_TOOLCHAIN_ROOT}/usr
+  readonly NACL_PREFIX=${NACL_TOOLCHAIN_ROOT}/system/local
 else
   readonly NACL_PREFIX=${NACL_TOOLCHAIN_ROOT}/${NACL_CROSS_PREFIX}/usr
 fi

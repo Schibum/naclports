@@ -29,19 +29,26 @@ GS_MIRROR_URL = '%s%s/mirror' % (GS_URL, GS_BUCKET)
 # and tested against the pepper_canary release. To build aginst older
 # versions of the SDK use the one of the pepper_XX branches (or use
 # --skip-sdk-version-check).
-MIN_SDK_VERSION = 42
+MIN_SDK_VERSION = 43
 
 arch_to_pkgarch = {
   'x86_64': 'x86-64',
   'i686': 'i686',
   'arm': 'arm',
   'pnacl': 'pnacl',
+  'emscripten': 'emscripten',
 }
 
 # Inverse of arch_to_pkgarch
 pkgarch_to_arch = {v:k for k, v in arch_to_pkgarch.items()}
 
-verbose = False
+LOG_ERROR   = 0
+LOG_WARN    = 1
+LOG_INFO    = 2
+LOG_VERBOSE = 3
+LOG_TRACE   = 4
+
+log_level = LOG_INFO
 color_mode = 'auto'
 
 def Color(message, color):
@@ -73,13 +80,22 @@ def Memoize(f):
   return Memo(f)
 
 
-def SetVerbose(verbosity):
-  global verbose
-  verbose = verbosity
+def SetVerbose(enabled):
+  if enabled:
+    SetLogLevel(LOG_VERBOSE)
+  else:
+    SetLogLevel(LOG_INFO)
 
 
-def Log(message):
+def SetLogLevel(verbosity):
+  global log_level
+  log_level = verbosity
+
+
+def Log(message, verbosity=LOG_INFO):
   """Log a message to the console (stdout)."""
+  if log_level < verbosity:
+    return
   sys.stdout.write(str(message) + '\n')
   sys.stdout.flush()
 
@@ -89,7 +105,7 @@ def LogHeading(message, suffix=''):
   if Color.enabled:
     Log(Color(message, 'green') + suffix)
   else:
-    if verbose:
+    if log_level > LOG_WARN:
       # When running in verbose mode make sure heading standout
       Log('###################################################################')
       Log(message + suffix)
@@ -99,13 +115,15 @@ def LogHeading(message, suffix=''):
 
 
 def Warn(message):
-  Log('warning: ' + message)
+  Log('warning: ' + message, LOG_WARN)
 
 
 def Trace(message):
-  """Log a message to the console if running in verbose mode (-v)."""
-  if verbose:
-    Log(message)
+  Log(message, LOG_TRACE)
+
+
+def LogVerbose(message):
+  Log(message, LOG_VERBOSE)
 
 
 def FindInPath(command_name):
@@ -114,10 +132,9 @@ def FindInPath(command_name):
   Returns:
     Full path to executable.
   """
-  if os.name == 'nt':
+  extensions = ('',)
+  if not os.path.splitext(command_name)[1] and os.name == 'nt':
     extensions = ('.bat', '.com', '.exe')
-  else:
-    extensions = ('',)
 
   for path in os.environ.get('PATH', '').split(os.pathsep):
     for ext in extensions:
@@ -150,7 +167,7 @@ def DownloadFile(filename, url):
     curl_cmd += ['--silent', '--show-error']
   curl_cmd.append(url)
 
-  if verbose:
+  if log_level > LOG_WARN:
     Log('Downloading: %s [%s]' % (url, filename))
   else:
     Log('Downloading: %s' % url.replace(GS_URL, ''))
@@ -196,6 +213,23 @@ def GetSDKRoot():
 
 
 @Memoize
+def GetEmscriptenRoot():
+  emscripten = os.environ.get('EMSCRIPTEN')
+  if emscripten is None:
+    local_root = os.path.join(paths.OUT_DIR, 'emsdk_portable', 'emscripten',
+                              'master')
+    if os.path.exists(local_root):
+      emscripten = local_root
+    else:
+      raise error.Error('$EMSCRIPTEN not set')
+
+  if not os.path.isdir(emscripten):
+    raise error.Error('$EMSCRIPTEN environment variable does not point'
+        ' to a directory: %s' % emscripten)
+  return emscripten
+
+
+@Memoize
 def GetSDKVersion():
   """Returns the version (as a string) of the current SDK."""
   getos = os.path.join(GetSDKRoot(), 'tools', 'getos.py')
@@ -225,11 +259,14 @@ def GetPlatform():
 
 
 @Memoize
-def GetToolchainRoot(config):
+def GetInstallRoot(config):
   """Returns the toolchain folder for a given NaCl toolchain."""
+  if config.toolchain == 'emscripten':
+    return os.path.join(GetEmscriptenRoot(), 'system', 'local')
+
   platform = GetPlatform()
   if config.toolchain == 'pnacl':
-    tc_dir = '%s_pnacl' % platform
+    tc_dir = os.path.join('%s_pnacl' % platform, 'le32-nacl')
   else:
     tc_arch = {
       'arm': 'arm',
@@ -242,33 +279,7 @@ def GetToolchainRoot(config):
       tc_dir = '%s_%s_%s' % (platform, tc_arch, config.toolchain)
     tc_dir = os.path.join(tc_dir, '%s-nacl' % config.arch)
 
-  rtn = os.path.join(GetSDKRoot(), 'toolchain', tc_dir)
-
-  # New PNaCl toolchains use 'le32-nacl'.
-  # TODO: make this the default once pepper_39 hits stable.
-  if config.toolchain == 'pnacl':
-    pnacl_dir = os.path.join(rtn, 'le32-nacl')
-    if os.path.exists(pnacl_dir):
-      rtn = pnacl_dir
-  return rtn
-
-
-@Memoize
-def GetInstallRoot(config):
-  """Returns the installation used by naclports within a given toolchain."""
-  tc_root = GetToolchainRoot(config)
-  # TODO(sbc): drop the pnacl special case once 'le32-nacl/usr' is available
-  # in the PNaCl default search path (should be once pepper_39 is stable).
-  if config.toolchain == 'pnacl':
-    if tc_root.endswith('le32-nacl'):
-      if int(GetSDKVersion()) < 40:
-        return os.path.join(tc_root, 'local')
-      else:
-        return os.path.join(tc_root, 'usr')
-    else:
-      return os.path.join(tc_root, 'usr', 'local')
-  else:
-    return os.path.join(tc_root, 'usr')
+  return os.path.join(GetSDKRoot(), 'toolchain', tc_dir, 'usr')
 
 
 @Memoize

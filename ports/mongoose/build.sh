@@ -7,8 +7,8 @@ BUILD_DIR=${SRC_DIR}
 BuildStep() {
   export EXTRA_CFLAGS="${NACLPORTS_CPPFLAGS} ${NACLPORTS_CFLAGS}"
   export LDFLAGS="${NACLPORTS_LDFLAGS}"
-  LDFLAGS+=" ${NACL_CLI_MAIN_LIB} -lppapi_simple -lnacl_io -lppapi_cpp -lppapi"
-  LDFLAGS+=" -l${NACL_CPP_LIB}"
+  LDFLAGS+=" ${NACL_CLI_MAIN_LIB} -lppapi_simple -lnacl_io -lppapi"
+  LDFLAGS+=" -l${NACL_CXX_LIB}"
   if [ "$NACL_LIBC" = "glibc" ]; then
     LDFLAGS+=" -ldl"
   fi
