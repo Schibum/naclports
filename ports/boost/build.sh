@@ -36,6 +36,7 @@ BUILD_ARGS+=" --without-signals"
 BUILD_ARGS+=" --without-mpi"
 BUILD_ARGS+=" --without-context"
 BUILD_ARGS+=" --without-coroutine"
+BUILD_ARGS+=" --without-wave"
 
 if [ "${NACL_LIBC}" != "glibc" ] ; then
   BUILD_ARGS+=" --without-locale"
@@ -57,7 +58,6 @@ if [ "${NACL_ARCH}" = "arm" -o "${NACL_ARCH}" = "pnacl" ]; then
   # tries to use during the build.
   BUILD_ARGS+=" --without-math"
   BUILD_ARGS+=" --without-thread"
-  BUILD_ARGS+=" --without-wave"
 fi
 
 ConfigureStep() {
