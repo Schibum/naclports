@@ -8,9 +8,7 @@
 
 # Main entry point for buildbots.
 # For local testing set BUILDBOT_BUILDERNAME and TEST_BUILDBOT, e.g:
-#  export TEST_BUILDBOT=1
-#  export BUILDBOT_BUILDERNAME=linux-newlib-0
-#  ./buildbot_selector.sh
+#  TEST_BUILDBOT=1 BUILDBOT_BUILDERNAME=linux-newlib-0 ./buildbot_selector.sh
 
 set -o errexit
 set -o nounset
@@ -79,7 +77,7 @@ Publish() {
 
 # Strip 'periodic-' prefix.
 BUILDBOT_BUILDERNAME=${BUILDBOT_BUILDERNAME#periodic-}
-PYTHON=python
+PYTHON=${SCRIPT_DIR}/python_wrapper
 
 if [ "${BUILDBOT_BUILDERNAME}" = "linux-sdk" ]; then
   readonly OS=linux
@@ -201,7 +199,9 @@ PlumbingTests() {
 }
 
 Unittests
-PlumbingTests
+if [ -z "${TEST_BUILDBOT:-}" ]; then
+  PlumbingTests
+fi
 
 # PEPPER_DIR is the root direcotry name within the bundle. e.g. pepper_28
 export PEPPER_VERSION=$(${NACL_SDK_ROOT}/tools/getos.py --sdk-version)
