@@ -14,8 +14,8 @@ set -o nounset
 shopt -s nullglob
 
 STORAGE_URL=${STORAGE_URL:-https://naclports.storage.googleapis.com/builds}
-SDK_VERSION=${SDK_VERSION:-pepper_41}
-REVISION=${REVISION:-trunk-241-g5777139}
+SDK_VERSION=${SDK_VERSION:-pepper_42}
+REVISION=${REVISION:-trunk-271-gd9be8c2}
 DEFAULT_SOURCE="${STORAGE_URL}/${SDK_VERSION}/${REVISION}/publish"
 VERBOSE=0
 
@@ -232,12 +232,17 @@ mingn.base|${PACKAGE_SOURCE}|glibc/tarballs/base.${NACL_ARCH}.zip \
 mingn.lib|${PACKAGE_SOURCE}|glibc/tarballs/lib.all.zip \
 emacs|${PACKAGE_SOURCE}|glibc/emacs-24.3.zip \
 git|${PACKAGE_SOURCE}|${TOOLCHAIN}/${NACL_ARCH_ALT}.zip \
+xz|${PACKAGE_SOURCE}|${TOOLCHAIN}/${NACL_ARCH_ALT}.zip \
 make|${PACKAGE_SOURCE}|${TOOLCHAIN}/${NACL_ARCH_ALT}.zip \
 grep|${PACKAGE_SOURCE}|${TOOLCHAIN}/${NACL_ARCH_ALT}.zip \
 ninja|${PACKAGE_SOURCE}|${TOOLCHAIN}/${NACL_ARCH_ALT}.zip \
 lua|${PACKAGE_SOURCE}|${TOOLCHAIN}/lua.zip \
 ruby|${PACKAGE_SOURCE}|${TOOLCHAIN}/ruby.zip \
-python|${PACKAGE_SOURCE}|${TOOLCHAIN}/python.zip"
+tk|${PACKAGE_SOURCE}|glibc/${NACL_ARCH_ALT}.zip \
+twm|${PACKAGE_SOURCE}|glibc/${NACL_ARCH_ALT}.zip \
+xeyes|${PACKAGE_SOURCE}|glibc/${NACL_ARCH_ALT}.zip \
+python|${PACKAGE_SOURCE}|${TOOLCHAIN}/python.zip \
+texlive|${PACKAGE_SOURCE}|${TOOLCHAIN}/${NACL_ARCH_ALT}.zip"
 
   for package in ${PACKAGE_LIST}; do
     InstallPackage ${package}

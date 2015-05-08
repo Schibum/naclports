@@ -3,12 +3,12 @@
 # found in the LICENSE file.
 
 BUILD_DIR=${SRC_DIR}
-if [ "${NACL_LIBC}" = "newlib" ]; then
+if [ "${TOOLCHAIN}" != "bionic" ]; then
   EXECUTABLES=out/glibc_compat_test
 fi
 
 ConfigureStep() {
-  if [ "${NACL_LIBC}" != "newlib" ]; then
+  if [ "${TOOLCHAIN}" = "bionic" ]; then
     return
   fi
   LogExecute cp -rf ${START_DIR}/* .
@@ -16,7 +16,7 @@ ConfigureStep() {
 }
 
 BuildStep() {
-  if [ "${NACL_LIBC}" != "newlib" ]; then
+  if [ "${TOOLCHAIN}" = "bionic" ]; then
     return
   fi
   # export the nacl tools
@@ -30,13 +30,14 @@ BuildStep() {
 }
 
 TestStep() {
-  if [ "${NACL_LIBC}" != "newlib" ]; then
+  if [ "${TOOLCHAIN}" = "bionic" ]; then
     return
   fi
-  if [ "${NACL_ARCH}" = "pnacl" ]; then
-    return
+  if [ "${TOOLCHAIN}" = "pnacl" ]; then
+    RunSelLdrCommand ./out/glibc_compat_test
+  else
+    LogExecute ./out/glibc_compat_test.sh
   fi
-  LogExecute ./out/glibc_compat_test.sh
 }
 
 InstallStep() {

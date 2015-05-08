@@ -53,9 +53,7 @@ BuildStep() {
       -o ${BUILD_DIR}/test_module_${NACL_ARCH}.nexe -lppapi_cpp -lppapi
 }
 
-InstallStep() {
-  DefaultInstallStep
-
+PublishStep() {
   MakeDir ${PUBLISH_DIR}
 
   # Tests
@@ -126,6 +124,9 @@ InstallStep() {
 }
 
 PostInstallTestStep() {
+  # Temporartily disabled until this gets fixed:
+  # https://code.google.com/p/naclports/issues/detail?id=187
+  return
   if [[ ${OS_NAME} == Darwin && ${NACL_ARCH} == x86_64 ]]; then
     echo "Skipping gdb/debug tests on unsupported mac + x86_64 configuration."
   elif [[ ${NACL_ARCH} == arm ]]; then

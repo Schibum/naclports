@@ -66,7 +66,7 @@ NACLPORTS_LDFLAGS+=" -L${NACLPORTS_LIBDIR} -Wl,-rpath-link=${NACLPORTS_LIBDIR}"
 
 # The NaCl version of ARM gcc emits warnings about va_args that
 # are not particularly useful
-if [ "${NACL_ARCH}" = "arm" ]; then
+if [ "${NACL_ARCH}" = "arm" -a "${TOOLCHAIN}" = "newlib" ]; then
   NACLPORTS_CFLAGS="${NACLPORTS_CFLAGS} -Wno-psabi"
   NACLPORTS_CXXFLAGS="${NACLPORTS_CXXFLAGS} -Wno-psabi"
 fi
@@ -95,7 +95,8 @@ fi
 # libcli_main.a has a circular dependency which makes static link fail
 # (cli_main => nacl_io => ppapi_cpp => cli_main). To break this loop,
 # you should use this instead of -lcli_main.
-export NACL_CLI_MAIN_LIB="-Wl,-uPSUserCreateInstance -lcli_main"
+export NACL_CLI_MAIN_LIB="-Xlinker -uPSUserCreateInstance \
+  -lcli_main -lnacl_spawn"
 
 # Python variables
 NACL_PYSETUP_ARGS=""
@@ -124,7 +125,7 @@ else
 fi
 
 if [ "${NACL_ARCH}" != "pnacl" ]; then
-  PACKAGE_SUFFIX+=_${NACL_LIBC}
+  PACKAGE_SUFFIX+=_${TOOLCHAIN}
 fi
 
 if [ "${NACL_DEBUG}" = "1" ]; then
@@ -136,8 +137,6 @@ NACL_INSTALL_SUBDIR+=${PACKAGE_SUFFIX}
 readonly DEST_PYTHON_OBJS=${NACL_PACKAGES_BUILD}/python-modules/${NACL_BUILD_SUBDIR}
 PACKAGE_FILE=${NACL_PACKAGES_ROOT}/${NAME}_${VERSION}${PACKAGE_SUFFIX}.tar.bz2
 
-# Don't support building with SDKs older than the current stable release
-MIN_SDK_VERSION=${MIN_SDK_VERSION:-40}
 NACLPORTS_QUICKBUILD=${NACLPORTS_QUICKBUILD:-0}
 
 if [ "${OS_NAME}" = "Darwin" ]; then
@@ -212,12 +211,7 @@ fi
 DESTDIR_LIB=${DESTDIR}/${PREFIX}/lib
 DESTDIR_INCLUDE=${DESTDIR}/${PREFIX}/include
 
-PUBLISH_DIR="${NACL_PACKAGES_PUBLISH}/${PACKAGE_NAME}"
-if [ "${NACL_ARCH}" = "pnacl" ]; then
-  PUBLISH_DIR+=/pnacl
-else
-  PUBLISH_DIR+=/${NACL_LIBC}
-fi
+PUBLISH_DIR="${NACL_PACKAGES_PUBLISH}/${PACKAGE_NAME}/${TOOLCHAIN}"
 
 SKIP_SEL_LDR_TESTS=0
 
@@ -283,7 +277,13 @@ InstallConfigSite() {
 # into the toolchain itself from ${NACL_SDK_ROOT}/include/<toolchain>.
 #
 InjectSystemHeaders() {
-  local TC_INCLUDES=${NACL_SDK_ROOT}/include/${TOOLCHAIN}
+  if [ ${TOOLCHAIN} = "clang-newlib" ]; then
+    local TC_DIR=pnacl
+  else
+    local TC_DIR=${TOOLCHAIN}
+  fi
+
+  local TC_INCLUDES=${NACL_SDK_ROOT}/include/${TC_DIR}
   if [ ! -d "${TC_INCLUDES}" ]; then
     return
   fi
@@ -305,8 +305,9 @@ InjectSystemHeaders() {
 
 
 PatchSpecsFile() {
-  if [ "${NACL_ARCH}" = "pnacl" -o \
-       "${NACL_ARCH}" = "emscripten" ]; then
+  if [ "${TOOLCHAIN}" = "pnacl" -o \
+       "${TOOLCHAIN}" = "clang-newlib" -o \
+       "${TOOLCHAIN}" = "emscripten" ]; then
     # The emscripten and PNaCl toolchains already include the required
     # include and library paths by default. No need to patch them.
     return
@@ -377,18 +378,6 @@ PatchSpecsFile() {
   # error when attempting to create a shared object.
   if [ "${NACL_SHARED}" != "1" ]; then
     sed -i.bak "s/%{shared:-shared/%{shared:%e${ERROR_MSG}/" "${SPECS_FILE}"
-  fi
-}
-
-
-CheckSDKVersion() {
-  local GETOS=${NACL_SDK_ROOT}/tools/getos.py
-  local RESULT=$("${GETOS}" --check-version="${MIN_SDK_VERSION}" 2>&1)
-  if [ -n "${RESULT:-}" ]; then
-    echo "The SDK in \$NACL_SDK_ROOT is too old to build ${PACKAGE_NAME}."
-    echo "Please update your SDK, or use the pepper_XX naclports branches."
-    echo "${RESULT}"
-    exit -1
   fi
 }
 
@@ -647,6 +636,8 @@ PublishByArchForDevEnv() {
     # TODO(bradnelson): Do something prettier.
     if [[ "$(head -c 2 ${nexe})" != "#!" && \
           "$(head -c 2 ${nexe})" != "# " && \
+          "${nexe}" != *.so && \
+          "${nexe}" != *.so.* && \
           "${nexe}" != *.txt && \
           "${nexe}" != config.status ]]; then
       # Strip non-scripts
@@ -660,7 +651,7 @@ PublishByArchForDevEnv() {
         # thing.
         LogExecute cp "${name}" tmp.nexe
         LogExecute python "${NACL_SDK_ROOT}/tools/create_nmf.py" \
-          tmp.nexe -s . -o tmp.nmf
+          tmp.nexe -s . -o tmp.nmf ${PUBLISH_CREATE_NMF_ARGS:-}
         LogExecute rm tmp.nexe
         LogExecute rm tmp.nmf
         popd
@@ -1095,12 +1086,17 @@ DefaultPythonModuleBuildStep() {
 
 
 DefaultTestStep() {
-  echo "No tests defined for ${PACKAGE_NAME}"
+  echo "No TestStep defined for ${PACKAGE_NAME}"
+}
+
+
+DefaultPublishStep() {
+  echo "No PublishStep defined for ${PACKAGE_NAME}"
 }
 
 
 DefaultPostInstallTestStep() {
-  echo "No post-packaging tests defined for ${PACKAGE_NAME}"
+  echo "No PostInstallTestStep defined for ${PACKAGE_NAME}"
 }
 
 
@@ -1276,7 +1272,7 @@ LIB_PATH_DEFAULT=${NACL_SDK_LIBDIR}:${NACLPORTS_LIBDIR}
 LIB_PATH_DEFAULT=\${LIB_PATH_DEFAULT}:\${NACL_SDK_LIB}:\${SCRIPT_DIR}
 SEL_LDR_LIB_PATH=\${SEL_LDR_LIB_PATH}:\${LIB_PATH_DEFAULT}
 
-"\${SEL_LDR}" -a -B "\${IRT}" -- \\
+"\${SEL_LDR}" -E TERM=$TERM -a -B "\${IRT}" -- \\
     "\${NACL_SDK_LIB}/runnable-ld.so" --library-path "\${SEL_LDR_LIB_PATH}" \\
     "\${SCRIPT_DIR}/$2" "\$@"
 HERE
@@ -1292,7 +1288,7 @@ fi
 SEL_LDR=${NACL_SEL_LDR}
 IRT=${NACL_IRT_PATH}
 
-"\${SEL_LDR}" -a -B "\${IRT}" -- "\${SCRIPT_DIR}/$2" "\$@"
+"\${SEL_LDR}" -E TERM=\${TERM} -a -B "\${IRT}" -- "\${SCRIPT_DIR}/$2" "\$@"
 HERE
   fi
   chmod 750 "$1"
@@ -1425,6 +1421,13 @@ PackageStep() {
   local basename=$(basename "${PACKAGE_FILE}")
   Banner "Packaging ${basename}"
   if [ -d "${INSTALL_DIR}${PREFIX}" ]; then
+    for item in "${INSTALL_DIR}"/*; do
+      if [ "$item" != "${INSTALL_DIR}${PREFIX}" ]; then
+        echo "INSTALL_DIR contains unexpected file or directory: $item"
+        echo "INSTALL_DIR should contain only '${PREFIX}'"
+        exit 1
+      fi
+    done
     mv "${INSTALL_DIR}${PREFIX}" "${INSTALL_DIR}/payload"
   fi
   local excludes="usr/doc share/man share/info info/
@@ -1491,6 +1494,7 @@ PackageInstall() {
   RunPostBuildStep
   # RunTestStep
   RunInstallStep
+  RunPublishStep
   RunPostInstallTestStep
   ZipPublishDir
   PackageStep
@@ -1544,6 +1548,7 @@ BuildStep()           { DefaultBuildStep;           }
 PostBuildStep()       { DefaultPostBuildStep;       }
 TestStep()            { DefaultTestStep;            }
 InstallStep()         { DefaultInstallStep;         }
+PublishStep()         { DefaultPublishStep;         }
 PostInstallTestStep() { DefaultPostInstallTestStep; }
 
 RunDownloadStep()   { RunStep DownloadStep; }
@@ -1593,6 +1598,11 @@ RunInstallStep()    {
 }
 
 
+RunPublishStep()    {
+  RunStep PublishStep "Publishing" "${BUILD_DIR}"
+}
+
+
 ######################################################################
 # Always run
 # These functions are called when this script is imported to do
@@ -1600,7 +1610,6 @@ RunInstallStep()    {
 ######################################################################
 CheckToolchain
 CheckPatchVersion
-CheckSDKVersion
 PatchSpecsFile
 InjectSystemHeaders
 InstallConfigSite

@@ -7,6 +7,10 @@ import platform
 
 from naclports import error, util
 
+VALID_TOOLCHAINS = ['newlib', 'glibc', 'bionic', 'pnacl', 'clang-newlib']
+VALID_LIBC = ['newlib', 'glibc', 'bionic']
+
+
 class Configuration(object):
   """Class representing the build configuration for naclports packages.
 
@@ -41,6 +45,9 @@ class Configuration(object):
         toolchain = self.default_toolchain
     self.toolchain = toolchain
 
+    if self.toolchain not in VALID_TOOLCHAINS:
+      raise error.Error("Invalid toolchain: %s" % self.toolchain)
+
     if not arch:
       if self.toolchain == 'pnacl':
         arch = 'pnacl'
@@ -70,7 +77,7 @@ class Configuration(object):
       self.config_name = 'release'
 
   def SetLibc(self):
-    if self.toolchain == 'pnacl':
+    if self.toolchain in ('pnacl', 'clang-newlib'):
       self.libc = 'newlib'
     else:
       self.libc = self.toolchain
@@ -83,7 +90,7 @@ class Configuration(object):
                (other.libc, other.toolchain, other.debug))
 
   def __str__(self):
-    return '%s/%s/%s' % (self.arch, self.libc, self.config_name)
+    return '%s/%s/%s' % (self.arch, self.toolchain, self.config_name)
 
   def __repr__(self):
     return '<Configuration %s>' % str(self)

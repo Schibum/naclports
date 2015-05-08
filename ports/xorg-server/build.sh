@@ -34,7 +34,6 @@ NACLPORTS_CFLAGS+=" -Dmain=SDL_main"
 export LIBS+="\
 -Wl,--undefined=nacl_main \
 -Wl,--undefined=SDL_main \
--lnacl_spawn \
 -lSDLmain -lSDL \
 ${NACL_CLI_MAIN_LIB} \
 -lppapi_simple -ltar -lnacl_io -lRegal -lglslopt \
@@ -57,6 +56,9 @@ PatchStep() {
 ConfigureStep() {
   ChangeDir ${SRC_DIR}
   autoreconf --force -v --install
+  # Without this xorg-server's configure script will run -print-program-path=ld
+  # which gives the wrong anser for PNaCl
+  export LD=${NACLLD}
   export GL_CFLAGS=" "
   export GL_LIBS="-lRegal"
   ChangeDir ${BUILD_DIR}

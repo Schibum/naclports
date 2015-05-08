@@ -7,7 +7,7 @@ BUILD_DIR=${SRC_DIR}
 
 BuildStep() {
   export CFLAGS="${NACLPORTS_CPPFLAGS} ${NACLPORTS_CFLAGS}"
-  export LDFLAGS="${NACLPORTS_LDFLAGS}"
+  export LDFLAGS="${NACLPORTS_LDFLAGS} ${NACL_CLI_MAIN_LIB}"
 
   CFLAGS+=" -DNO_SSL -DNO_CGI"
   if [ "${NACL_LIBC}" = "glibc" ]; then
@@ -47,5 +47,4 @@ InstallStep() {
   MakeDir ${DESTDIR_INCLUDE}/civetweb
   LogExecute cp include/civetweb.h ${DESTDIR_INCLUDE}/civetweb
   LogExecute cp include/CivetServer.h ${DESTDIR_INCLUDE}/civetweb
-  PublishStep
 }

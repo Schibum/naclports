@@ -4,7 +4,7 @@
 
 EXECUTABLES="ninja"
 
-LIBS+="${NACL_CLI_MAIN_LIB} -lnacl_spawn -lppapi_simple -lnacl_io \
+LIBS+="${NACL_CLI_MAIN_LIB} -lppapi_simple -lnacl_io \
     -lppapi -lppapi_cpp"
 
 if [ "${NACL_LIBC}" = "newlib" ]; then
@@ -41,6 +41,10 @@ TestStep() {
 }
 
 InstallStep() {
+  return
+}
+
+PublishStep() {
   MakeDir ${PUBLISH_DIR}
   MakeDir ${PUBLISH_DIR}/${NACL_ARCH}
   LogExecute cp ninja ${PUBLISH_DIR}/${NACL_ARCH}/ninja

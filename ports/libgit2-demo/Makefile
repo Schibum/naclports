@@ -2,13 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-VALID_TOOLCHAINS := glibc newlib pnacl
 include $(NACL_SDK_ROOT)/tools/common.mk
 
 NACL_LDFLAGS += -Wl,--undefined=PSUserCreateInstance
 PNACL_LDFLAGS += -Wl,--undefined=PSUserCreateInstance
 TARGET = libgit2-demo
-CORE_LIBS = cli_main ppapi_simple nacl_io ppapi_cpp ppapi
+CORE_LIBS = cli_main nacl_spawn ppapi_simple nacl_io ppapi_cpp ppapi
 
 LIBS = git2 ssh2 ssl crypto z $(CORE_LIBS)
 ifeq ($(TOOLCHAIN),newlib)
@@ -57,6 +56,7 @@ install:
 ifeq ($(TOOLCHAIN),glibc)
 	cp -r $(OUTDIR)/lib* $(INSTALL_DIR)
 endif
+	cp httpd.py $(INSTALL_DIR)
 	cp index.html $(INSTALL_DIR)
 	cp background.js $(INSTALL_DIR)
 	cp libgit2.js $(INSTALL_DIR)

@@ -25,6 +25,12 @@ GS_URL = 'http://storage.googleapis.com/'
 GS_BUCKET = 'naclports'
 GS_MIRROR_URL = '%s%s/mirror' % (GS_URL, GS_BUCKET)
 
+# Require the latest version of the NaCl SDK. naclports is built
+# and tested against the pepper_canary release. To build aginst older
+# versions of the SDK use the one of the pepper_XX branches (or use
+# --skip-sdk-version-check).
+MIN_SDK_VERSION = 42
+
 arch_to_pkgarch = {
   'x86_64': 'x86-64',
   'i686': 'i686',
@@ -116,7 +122,7 @@ def FindInPath(command_name):
   for path in os.environ.get('PATH', '').split(os.pathsep):
     for ext in extensions:
       full_name = os.path.join(path, command_name + ext)
-      if os.path.exists(full_name):
+      if os.path.exists(full_name) and os.path.isfile(full_name):
         return full_name
 
   raise error.Error('command not found: %s' % command_name)
@@ -178,6 +184,12 @@ def CheckStamp(filename, contents=None):
 def GetSDKRoot():
   """Returns the root of the currently configured Native Client SDK."""
   root = os.environ.get('NACL_SDK_ROOT')
+  if root is None:
+    local_sdk_root = os.path.join(paths.OUT_DIR, 'nacl_sdk')
+    if os.path.exists(local_sdk_root):
+      root = local_sdk_root
+    else:
+      raise error.Error('$NACL_SDK_ROOT not set')
   if sys.platform == "cygwin":
     root = root.replace('\\', '/')
   return root
@@ -185,10 +197,15 @@ def GetSDKRoot():
 
 @Memoize
 def GetSDKVersion():
-  """Returns the version of the currently configured Native Client SDK."""
+  """Returns the version (as a string) of the current SDK."""
   getos = os.path.join(GetSDKRoot(), 'tools', 'getos.py')
   version = subprocess.check_output([getos, '--sdk-version']).strip()
   return version
+
+
+def CheckSDKVersion(version):
+  """Returns True if the currently configured SDK is 'version' or above."""
+  return int(GetSDKVersion()) >= int(version)
 
 
 @Memoize
@@ -219,7 +236,10 @@ def GetToolchainRoot(config):
       'i686': 'x86',
       'x86_64': 'x86'
     }[config.arch]
-    tc_dir = '%s_%s_%s' % (platform, tc_arch, config.toolchain)
+    if config.toolchain == 'clang-newlib':
+      tc_dir = '%s_pnacl' % platform
+    else:
+      tc_dir = '%s_%s_%s' % (platform, tc_arch, config.toolchain)
     tc_dir = os.path.join(tc_dir, '%s-nacl' % config.arch)
 
   rtn = os.path.join(GetSDKRoot(), 'toolchain', tc_dir)
@@ -287,16 +307,22 @@ def IsInstalled(package_name, config, stamp_content=None):
 def CheckSDKRoot():
   """Check validity of NACL_SDK_ROOT."""
   root = GetSDKRoot()
-  if not root:
-    raise error.Error('$NACL_SDK_ROOT not set')
 
   if not os.path.isdir(root):
     raise error.Error('$NACL_SDK_ROOT does not exist: %s' % root)
 
-  sentinel = os.path.join(root, 'tools', 'getos.py')
-  if not os.path.exists(sentinel):
+  landmark = os.path.join(root, 'tools', 'getos.py')
+  if not os.path.exists(landmark):
     raise error.Error("$NACL_SDK_ROOT (%s) doesn't look right. "
-                      "Couldn't find sentinel file (%s)" % (root, sentinel))
+                      "Couldn't find landmark file (%s)" % (root, landmark))
+
+  if not CheckSDKVersion(MIN_SDK_VERSION):
+    raise error.Error(
+        'This version of naclports requires at least version %s of\n'
+        'the NaCl SDK. The version in $NACL_SDK_ROOT is %s. If you want\n'
+        'to use naclports with an older version of the SDK please checkout\n'
+        'one of the pepper_XX branches (or run with\n'
+        '--skip-sdk-version-check).' % (MIN_SDK_VERSION, GetSDKVersion()))
 
 
 def HashFile(filename):

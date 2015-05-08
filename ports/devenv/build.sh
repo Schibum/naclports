@@ -3,7 +3,7 @@
 # found in the LICENSE file.
 
 export EXTRA_LIBS="${NACL_CLI_MAIN_LIB} \
-  -lnacl_spawn -lppapi_simple \
+  -lppapi_simple \
   -lnacl_io -lppapi -lppapi_cpp -l${NACL_CPP_LIB}"
 
 EXECUTABLES="tests/devenv_small_test_${NACL_ARCH}${NACL_EXEEXT} \
@@ -61,11 +61,11 @@ InstallStep() {
   # Install the HTML/JS for the terminal.
   ChangeDir ${APP_DIR}
   LogExecute python ${TOOLS_DIR}/create_term.py -i whitelist.js bash.nmf
+  LogExecute cp bash.nmf sh.nmf
   InstallNaClTerm ${APP_DIR}
 
-  RESOURCES="background.js bash.js bashrc package
-      graphical.html whitelist.js devenv_16.png devenv_48.png
-      devenv_128.png"
+  RESOURCES="background.js bash.js bashrc install-base-packages.sh package
+      graphical.html whitelist.js devenv_16.png devenv_48.png devenv_128.png"
   for resource in ${RESOURCES}; do
     LogExecute install ${START_DIR}/${resource} ${APP_DIR}/
   done
@@ -84,7 +84,7 @@ InstallStep() {
 
   # Zip the full app for upload.
   ChangeDir ${PUBLISH_DIR}
-  CreateWebStoreZip devenv_small_test.zip devenv_app_upload
+  CreateWebStoreZip devenv_app_upload.zip devenv_app_upload
 
   # Copy the files for DevEnvWidget.
   local WIDGET_DIR=${PUBLISH_DIR}/devenvwidget
@@ -105,7 +105,8 @@ InstallStep() {
   LogExecute mv devenv_small_test_${NACL_ARCH}${NACL_EXEEXT} \
       devenv_small_test_${NACL_ARCH}
 
-  CreateWebStoreZip devenv_small_test.zip .
+  Remove devenv_small_test.zip
+  LogExecute zip -r devenv_small_test.zip *
 }
 
 PostInstallTestStep() {
@@ -123,6 +124,13 @@ PostInstallTestStep() {
     LogExecute python ${START_DIR}/devenv_small_test.py -x -vv -a ${arch}
     if [[ ${NACL_ARCH} == pnacl ]]; then
       LogExecute python ${START_DIR}/jseval_test.py -x -vv -a ${arch}
+    fi
+    # Run large and io2014 tests only on the buildbots (against pinned revs).
+    if [[ "${BUILDBOT_BUILDERNAME:-}" != "" ]]; then
+      LogExecute python ${START_DIR}/../devenv/devenv_large_test.py \
+        -x -vv -a ${arch}
+      LogExecute python ${START_DIR}/../devenv/io2014_test.py \
+        -x -vv -a ${arch}
     fi
   done
 }

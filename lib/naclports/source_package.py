@@ -291,16 +291,22 @@ class SourcePackage(package.Package):
 
     start = time.time()
     with util.BuildLock():
-      with RedirectStdoutStderr(log_filename):
-        old_verbose = util.verbose
-        try:
-          util.verbose = True
-          self.Download()
-          self.Extract()
-          self.Patch()
-          self.RunBuildSh()
-        finally:
-          util.verbose = old_verbose
+      try:
+        with RedirectStdoutStderr(log_filename):
+          old_verbose = util.verbose
+          try:
+            util.verbose = True
+            self.Download()
+            self.Extract()
+            self.Patch()
+            self.RunBuildSh()
+          finally:
+            util.verbose = old_verbose
+      except:
+        if log_filename:
+          with open(log_filename) as log_file:
+            sys.stdout.write(log_file.read())
+        raise
 
     duration = FormatTimeDelta(time.time() - start)
     util.LogHeading('Build complete', ' [took %s]' % duration)
@@ -313,6 +319,7 @@ class SourcePackage(package.Package):
     env['TOOLCHAIN'] = self.config.toolchain
     env['NACL_ARCH'] = self.config.arch
     env['NACL_DEBUG'] = self.config.debug and '1' or '0'
+    env['NACL_SDK_ROOT'] = util.GetSDKRoot()
     rtn = subprocess.call(cmd,
                           stdout=sys.stdout,
                           stderr=sys.stderr,
@@ -468,18 +475,25 @@ class SourcePackage(package.Package):
       raise DisabledError('%s: cannot be built with %s'
                           % (self.NAME, self.config.libc))
 
-    if self.DISABLED_LIBC is not None:
-      if self.config.libc in self.DISABLED_LIBC:
-        raise DisabledError('%s: cannot be built with %s'
-                            % (self.NAME, self.config.libc))
+    if self.config.libc in self.DISABLED_LIBC:
+      raise DisabledError('%s: cannot be built with %s'
+                          % (self.NAME, self.config.libc))
+
+    if self.config.toolchain in self.DISABLED_TOOLCHAIN:
+      raise DisabledError('%s: cannot be built with %s'
+                          % (self.NAME, self.config.toolchain))
+
+    if self.config.arch in self.DISABLED_ARCH:
+      raise DisabledError('%s: disabled for current arch: %s'
+                          % (self.NAME, self.config.arch))
+
+    if self.MIN_SDK_VERSION is not None:
+      if not util.CheckSDKVersion(self.MIN_SDK_VERSION):
+        raise DisabledError('%s: requires SDK version %s or above'
+                            % (self.NAME, self.MIN_SDK_VERSION))
 
     if self.ARCH is not None:
       if self.config.arch not in self.ARCH:
-        raise DisabledError('%s: disabled for current arch: %s'
-                            % (self.NAME, self.config.arch))
-
-    if self.DISABLED_ARCH is not None:
-      if self.config.arch in self.DISABLED_ARCH:
         raise DisabledError('%s: disabled for current arch: %s'
                             % (self.NAME, self.config.arch))
 
@@ -535,7 +549,8 @@ class SourcePackage(package.Package):
     git_mirror = git_mirror.replace('/', '_')
     mirror_dir = os.path.join(paths.CACHE_ROOT, git_mirror)
     if os.path.exists(mirror_dir):
-      if RunGitCmd(mirror_dir, ['rev-parse', git_commit], error_ok=True) != 0:
+      if RunGitCmd(mirror_dir,
+                   ['rev-parse', git_commit + '^{commit}'], error_ok=True) != 0:
         Log('Updating git mirror: %s' % util.RelPath(mirror_dir))
         RunGitCmd(mirror_dir, ['remote', 'update', '--prune'])
     else:

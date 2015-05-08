@@ -32,6 +32,9 @@ DevEnvTest.prototype.setUp = function() {
     return chrometest.proxyExtension('TCP Interface');
   }).then(function(ext) {
     self.tcp = ext;
+    return self.initFileSystem();
+  }).then(function() {
+    return self.mkdir('/home/user');
   });
 };
 
@@ -153,6 +156,17 @@ DevEnvTest.prototype.installPackage = function(name) {
   var cmd = 'bash /mnt/http/package -f -i ' + name;
   if (this.params['latest'] === '1') {
     cmd += ' -s ' + window.location.origin + '/publish';
+  }
+  chrometest.info(cmd);
+  return this.checkCommand(cmd, 0);
+};
+
+DevEnvTest.prototype.installDefaultPackages = function(name) {
+  if (this.params['latest'] === '1') {
+    var cmd = 'bash /mnt/http/install-base-packages.sh';
+    cmd += ' -f -s ' + window.location.origin + '/publish';
+  } else {
+    var cmd = '. /mnt/http/bashrc';
   }
   chrometest.info(cmd);
   return this.checkCommand(cmd, 0);

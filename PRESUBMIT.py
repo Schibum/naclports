@@ -101,20 +101,20 @@ TRYBOTS = [
     'naclports-linux-newlib-2',
     'naclports-linux-newlib-3',
     'naclports-linux-newlib-4',
-    'naclports-linux-pnacl_newlib-0',
-    'naclports-linux-pnacl_newlib-1',
-    'naclports-linux-pnacl_newlib-2',
-    'naclports-linux-pnacl_newlib-3',
-    'naclports-linux-pnacl_newlib-4',
-    'naclports-linux-bionic-0',
-    'naclports-linux-bionic-1',
-    'naclports-linux-bionic-2',
-    'naclports-linux-bionic-3',
-    'naclports-linux-bionic-4',
+    'naclports-linux-pnacl-0',
+    'naclports-linux-pnacl-1',
+    'naclports-linux-pnacl-2',
+    'naclports-linux-pnacl-3',
+    'naclports-linux-pnacl-4',
+    'naclports-linux-clang-0',
+    'naclports-linux-clang-1',
+    'naclports-linux-clang-2',
+    'naclports-linux-clang-3',
+    'naclports-linux-clang-4',
 ]
 
 
 def GetPreferredTryMasters(_, change):
   return {
-    'tryserver.chromium': { t: set(['defaulttests']) for t in TRYBOTS },
+    'tryserver.nacl': { t: set(['defaulttests']) for t in TRYBOTS },
   }

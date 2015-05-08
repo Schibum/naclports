@@ -9,7 +9,8 @@ from naclports.error import PkgFormatError
 
 VALID_KEYS = ['NAME', 'VERSION', 'URL', 'ARCHIVE_ROOT', 'LICENSE', 'DEPENDS',
               'MIN_SDK_VERSION', 'LIBC', 'DISABLED_LIBC', 'ARCH', 'CONFLICTS',
-              'DISABLED_ARCH', 'URL_FILENAME', 'BUILD_OS', 'SHA1', 'DISABLED']
+              'DISABLED_ARCH', 'URL_FILENAME', 'BUILD_OS', 'SHA1', 'DISABLED',
+              'DISABLED_TOOLCHAIN']
 REQUIRED_KEYS = ['NAME', 'VERSION']
 
 
@@ -37,7 +38,7 @@ def ParsePkgInfo(contents, filename, valid_keys=None, required_keys=None):
 
   def ParsePkgInfoLine(line, line_no):
     if '=' not in line:
-      raise PkgFormatError('Invalid info line %s:%d' % (line_no, filename))
+      raise PkgFormatError('Invalid info line %s:%d' % (filename, line_no))
     key, value = line.split('=', 1)
     key = key.strip()
     if key not in valid_keys:
