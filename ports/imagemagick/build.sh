@@ -23,7 +23,6 @@ EXTRA_CONFIGURE_ARGS="--disable-largefile --without-fftw --without-xml
   --without-webp
   --without-tiff
   --without-pango
-  --without-png
   --without-openexr
   --without-openjp2
   --without-lqr
