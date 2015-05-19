@@ -2,18 +2,26 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# The NaCL SDK includes a version of jsoncpp conflicts with this one.
-# Remove the SDK include path so that these headers don't get used
-# during the build.
-NACLPORTS_CPPFLAGS=${NACLPORTS_CPPFLAGS/-I${NACL_SDK_ROOT}\/include/}
+BUILD_DIR=${SRC_DIR}
 
-EXECUTABLES=src/test_lib_json/jsoncpp_test
+BuildStep() {
+  export CXXCMD="${NACLCC} -Iinclude -I."
+  LogExecute ${CXXCMD} -c src/lib_json/json_reader.cpp
+  LogExecute ${CXXCMD} -c src/lib_json/json_value.cpp
+  LogExecute ${CXXCMD} -c src/lib_json/json_writer.cpp
 
-EXTRA_CMAKE_ARGS="-DJSONCPP_WITH_POST_BUILD_UNITTEST=OFF"
+  LogExecute ${NACLAR} rcs libjsoncpp.a \
+    json_reader.o \
+    json_value.o \
+    json_writer.o
 
-TestStep() {
-  if [ "${TOOLCHAIN}" = "pnacl" ]; then
-    return
-  fi
-  LogExecute src/test_lib_json/jsoncpp_test.sh
+  LogExecute ${NACLRANLIB} libjsoncpp.a
+}
+
+
+InstallStep() {
+  MakeDir ${DESTDIR_LIB}
+  MakeDir ${DESTDIR_INCLUDE}
+  LogExecute cp libjsoncpp.a ${DESTDIR_LIB}
+  LogExecute cp -R include/json ${DESTDIR_INCLUDE}
 }
