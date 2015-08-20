@@ -55,3 +55,8 @@ ConfigureStep() {
     --prefix=${PREFIX} \
     ${extra_args}
 }
+
+TestStep() {
+  SetupCrossPaths
+  LogExecute make testprogs
+}

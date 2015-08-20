@@ -2,14 +2,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-export EXTRA_LIBS="${NACL_CLI_MAIN_LIB} -lppapi_simple \
-  -lnacl_io -lppapi -l${NACL_CXX_LIB}"
+export EXTRA_LIBS="${NACL_CLI_MAIN_LIB}"
 
 if [ "${NACL_LIBC}" = "newlib" ]; then
   NACLPORTS_CPPFLAGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat"
 fi
 
-NACLPORTS_CPPFLAGS+=" -DGNULIB_defined_struct_sigaction"
+NACLPORTS_CPPFLAGS+=" -DGNULIB_defined_struct_sigaction -Dpipe=nacl_spawn_pipe"
 
 PatchStep() {
   DefaultPatchStep

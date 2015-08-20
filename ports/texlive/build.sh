@@ -1,8 +1,8 @@
-# Copyright (c) 2013 The Native Client Authors. All rights reserved.
+# Copyright 2015 The Native Client Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-TLNET_URL=http://storage.googleapis.com/naclports/mirror/texlive-20150202
+TLNET_URL=http://storage.googleapis.com/naclports/mirror/texlive-20150523
 
 SCHEME="small"
 
@@ -26,8 +26,7 @@ EXTRA_CONFIGURE_ARGS="--disable-native-texlive-build \
                       --with-banner-add=/NaCl \
                       --without-x"
 
-export EXTRA_LIBS="${NACL_CLI_MAIN_LIB} -ltar -lppapi_simple \
-  -lnacl_io -lppapi -l${NACL_CXX_LIB}"
+export EXTRA_LIBS="${NACL_CLI_MAIN_LIB}"
 
 if [ "${NACL_LIBC}" = "newlib" ]; then
   NACLPORTS_CFLAGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat"
@@ -74,7 +73,7 @@ ConfigureStep() {
   # TODO(phosek): we need to hardcode the package path because kpathsea which
   # is normally responsible for resolving paths requires fork/spawn and pipes;
   # once nacl_io has support for pipes, we could remove this bit
-  sed -i "s+\$PACKAGEDIR+/mnt/html5/packages/texlive.${NACL_ARCH}+g" \
+  sed -i "s+\$PACKAGEDIR+/packages/texlive.${NACL_ARCH}+g" \
     ${SRC_DIR}/texk/kpathsea/texmf.cnf
 
   export ac_exeext=${NACL_EXEEXT}
@@ -87,11 +86,14 @@ BuildStep() {
 }
 
 InstallStep() {
+  INSTALL_TARGETS="install-strip texlinks"
+  DefaultInstallStep
+  Remove ${DESTDIR}${PREFIX}/bin/mktexfmt
+}
+
+PublishStep() {
   MakeDir ${PUBLISH_DIR}
   local ARCH_DIR=${PUBLISH_DIR}/${NACL_ARCH}
-
-  INSTALL_TARGETS="install-strip texlinks"
-  (DefaultInstallStep)
 
   ChangeDir ${PUBLISH_DIR}
   local INSTALL_TL="install-tl-unx.tar.gz"
@@ -127,6 +129,10 @@ InstallStep() {
   cp ${SRC_DIR}/texk/kpathsea/texmf.cnf texmf-dist/web2c/texmf.cnf
   ChangeDir ${ARCH_DIR}
 
+  # TODO(phosek): Undo all source tree changes except for those coming from
+  # nacl.patch, this step could be removed once we get kpathsea to work.
+  (cd ${SRC_DIR}; git reset --hard)
+
   # TODO(phosek): The code below could be potentially replaced by
   # PublishByArchForDevEnv, but there is a subtle difference in that we only
   # copy executables valid for the selected scheme (tl_executables) and
@@ -161,4 +167,8 @@ InstallStep() {
   ChangeDir ${ARCH_DIR}
   LogExecute rm -f ${ARCH_DIR}.zip
   LogExecute zip -r ${ARCH_DIR}.zip .
+
+  # Drop unzipped copy to reduce upload failures on the bots.
+  ChangeDir ${PUBLISH_DIR}
+  LogExecute rm -rf ${PUBLISH_DIR}/${ARCH_DIR}
 }

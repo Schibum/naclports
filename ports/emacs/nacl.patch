@@ -99,25 +99,21 @@ diff --git a/configure b/configure
 diff --git a/leim/Makefile.in b/leim/Makefile.in
 --- a/leim/Makefile.in
 +++ b/leim/Makefile.in
-@@ -31,7 +31,7 @@ srcdir=@srcdir@
+@@ -28,10 +28,13 @@ SHELL = /bin/sh
+ 
+ # Here are the things that we expect ../configure to edit.
+ srcdir=@srcdir@
++top_srcdir = @top_srcdir@
++abs_top_builddir = @abs_top_builddir@
++EXEEXT = @EXEEXT@
  
  # Which Emacs to use to convert TIT files to Emacs Lisp files,
  # byte-compile Emacs Lisp files, and generate the file leim-list.el.
 -EMACS = ../src/emacs
-+EMACS = ../src/emacs${EXEEXT}
++EMACS = ${abs_top_builddir}/src/emacs${EXEEXT}
  
  buildlisppath=${srcdir}/../lisp
  
-@@ -81,7 +81,8 @@ TIT_MISC=${CHINESE_TIT} ${MISC}
- 	@echo Compiling $<
- 	@${RUN_EMACS} -l ${buildlisppath}/international/quail -f batch-byte-compile $<
- 
--all: leim-list.el compile-main
-+# all: leim-list.el compile-main
-+all: leim-list.el
- .PHONY: all
- 
- TIT_SOURCES= \
 diff --git a/lib-src/Makefile.in b/lib-src/Makefile.in
 --- a/lib-src/Makefile.in
 +++ b/lib-src/Makefile.in
@@ -231,13 +227,20 @@ diff --git a/lib/symlink.c b/lib/symlink.c
 diff --git a/lisp/Makefile.in b/lisp/Makefile.in
 --- a/lisp/Makefile.in
 +++ b/lisp/Makefile.in
-@@ -30,7 +30,8 @@ VPATH = $(srcdir)
+@@ -21,6 +21,7 @@ SHELL = /bin/sh
+ srcdir = @srcdir@
+ top_srcdir = @top_srcdir@
+ abs_top_builddir = @abs_top_builddir@
++EXEEXT = @EXEEXT@
+ lisp = $(srcdir)
+ VPATH = $(srcdir)
+ 
+@@ -30,7 +31,7 @@ VPATH = $(srcdir)
  # We sometimes change directory before running Emacs (typically when
  # building out-of-tree, we chdir to the source directory), so we need
  # to use an absolute file name.
 -EMACS = ${abs_top_builddir}/src/emacs
-+# TODO(petewil) Convert this to use ${EXEEXT} instead of .nexe - need symbol
-+EMACS = ${abs_top_builddir}/src/emacs.nexe
++EMACS = ${abs_top_builddir}/src/emacs${EXEEXT}
  
  # Command line flags for Emacs.
  
@@ -285,6 +288,23 @@ diff --git a/lisp/loadup.el b/lisp/loadup.el
  
  (if (or (member (nth 3 command-line-args) '("dump" "bootstrap"))
  	(member (nth 4 command-line-args) '("dump" "bootstrap")))
+diff --git a/lisp/shell.el b/lisp/shell.el
+--- a/lisp/shell.el
++++ b/lisp/shell.el
+@@ -292,10 +292,11 @@ Value is a list of strings, which may be nil."
+     (if (and (not purify-flag)
+ 	     (equal name "bash")
+ 	     (file-executable-p prog)
+-	     (string-match "bad option"
++             (and (not (equal system-type 'nacl))
++	          (string-match "bad option"
+ 			   (shell-command-to-string
+ 			    (concat (shell-quote-argument prog)
+-				    " --noediting"))))
++				    " --noediting")))))
+ 	'("-i")
+       '("--noediting" "-i")))
+   "Args passed to inferior shell by \\[shell], if the shell is bash.
 diff --git a/lisp/startup.el b/lisp/startup.el
 --- a/lisp/startup.el
 +++ b/lisp/startup.el
@@ -329,6 +349,21 @@ diff --git a/lisp/startup.el b/lisp/startup.el
  
  			  ;; If we did not find the user's init file,
  			  ;; set user-init-file conclusively.
+diff --git a/lisp/window.el b/lisp/window.el
+--- a/lisp/window.el
++++ b/lisp/window.el
+@@ -4001,7 +4001,10 @@ right, if any."
+     (let ((quit-restore (window-parameter old-window 'quit-restore)))
+       (when quit-restore
+ 	(set-window-parameter new-window 'quit-restore quit-restore)))
+-    new-window))
++    new-window)
++  ;; To workaround drawing issues with NaCl terminals, redraw now.
++  (if (equal system-type 'nacl)
++      (redraw-display)))
+ 
+ (defalias 'split-window-horizontally 'split-window-right)
+ 
 diff --git a/src/Makefile.in b/src/Makefile.in
 --- a/src/Makefile.in
 +++ b/src/Makefile.in
@@ -347,7 +382,7 @@ diff --git a/src/Makefile.in b/src/Makefile.in
  
  UNEXEC_OBJ = @UNEXEC_OBJ@
  
-@@ -328,6 +330,10 @@ ALL_OBJC_CFLAGS=$(ALL_CFLAGS) $(GNU_OBJC_CFLAGS)
+@@ -328,6 +330,22 @@ ALL_OBJC_CFLAGS=$(ALL_CFLAGS) $(GNU_OBJC_CFLAGS)
  	@$(MKDEPDIR)
  	$(CC) -c $(CPPFLAGS) $(ALL_OBJC_CFLAGS) $<
  
@@ -355,10 +390,22 @@ diff --git a/src/Makefile.in b/src/Makefile.in
 +	@$(MKDEPDIR)
 +	$(CC) -c $(CPPFLAGS) $(ALL_CFLAGS) $< -DNACL_EMACS -o $@
 +
++nacl_process.o: process.c
++	@$(MKDEPDIR)
++	$(CC) -c $(CPPFLAGS) $(ALL_CFLAGS) $< -DNACL_EMACS -o $@
++
++nacl_callproc.o: callproc.c
++	@$(MKDEPDIR)
++	$(CC) -c $(CPPFLAGS) $(ALL_CFLAGS) $< -DNACL_EMACS -o $@
++
++nacl_sysdep.o: sysdep.c
++	@$(MKDEPDIR)
++	$(CC) -c $(CPPFLAGS) $(ALL_CFLAGS) $< -DNACL_EMACS -o $@
++
  
  ## lastfile must follow all files whose initialized data areas should
  ## be dumped as pure by dump-emacs.
-@@ -346,9 +352,29 @@ base_obj = dispnew.o frame.o scroll.o xdisp.o menu.o $(XMENU_OBJ) window.o \
+@@ -346,9 +364,29 @@ base_obj = dispnew.o frame.o scroll.o xdisp.o menu.o $(XMENU_OBJ) window.o \
  	doprnt.o intervals.o textprop.o composite.o xml.o \
  	profiler.o \
  	$(MSDOS_OBJ) $(MSDOS_X_OBJ) $(NS_OBJ) $(CYGWIN_OBJ) $(FONT_OBJ) \
@@ -371,14 +418,14 @@ diff --git a/src/Makefile.in b/src/Makefile.in
 +nacl_obj = dispnew.o frame.o scroll.o xdisp.o menu.o $(XMENU_OBJ) window.o \
 +	charset.o coding.o category.o ccl.o character.o chartab.o bidi.o \
 +	cm.o term.o terminal.o xfaces.o $(XOBJ) $(GTK_OBJ) $(DBUS_OBJ) \
-+	nacl_emacs.o keyboard.o macros.o keymap.o sysdep.o \
++	nacl_emacs.o keyboard.o macros.o keymap.o nacl_sysdep.o \
 +	buffer.o filelock.o insdel.o marker.o \
 +	minibuf.o fileio.o dired.o \
 +	cmds.o casetab.o casefiddle.o indent.o search.o regex.o undo.o \
 +	alloc.o data.o doc.o editfns.o callint.o \
 +	eval.o floatfns.o fns.o font.o print.o lread.o \
 +	syntax.o $(UNEXEC_OBJ) bytecode.o \
-+	process.o gnutls.o callproc.o \
++	nacl_process.o gnutls.o nacl_callproc.o \
 +	region-cache.o sound.o atimer.o \
 +	doprnt.o intervals.o textprop.o composite.o xml.o \
 +	profiler.o \
@@ -389,7 +436,7 @@ diff --git a/src/Makefile.in b/src/Makefile.in
  ## Object files used on some machine or other.
  ## These go in the DOC file on all machines in case they are needed.
  ## Some of them have no DOC entries, but it does no harm to have them
-@@ -400,9 +426,10 @@ LIBES = $(LIBS) $(W32_LIBS) $(LIBS_GNUSTEP) $(LIBX_BASE) $(LIBIMAGE) \
+@@ -400,9 +438,10 @@ LIBES = $(LIBS) $(W32_LIBS) $(LIBS_GNUSTEP) $(LIBX_BASE) $(LIBIMAGE) \
     $(LIBGNUTLS_LIBS) $(LIB_PTHREAD) $(LIB_PTHREAD_SIGMASK) \
     $(LIB_GCC) $(LIB_MATH) $(LIB_STANDARD) $(LIB_GCC)
  
@@ -401,7 +448,7 @@ diff --git a/src/Makefile.in b/src/Makefile.in
  $(leimdir)/leim-list.el: bootstrap-emacs$(EXEEXT)
  	cd $(leimdir) && $(MAKE) $(MFLAGS) leim-list.el EMACS=$(bootstrap_exe)
  
-@@ -414,7 +441,12 @@ $(leimdir)/leim-list.el: bootstrap-emacs$(EXEEXT)
+@@ -414,7 +453,12 @@ $(leimdir)/leim-list.el: bootstrap-emacs$(EXEEXT)
  emacs$(EXEEXT): temacs$(EXEEXT) $(etc)/DOC $(lisp) $(leimdir)/leim-list.el
  	if test "$(CANNOT_DUMP)" = "yes"; then \
  	  rm -f emacs$(EXEEXT); \
@@ -415,7 +462,7 @@ diff --git a/src/Makefile.in b/src/Makefile.in
  	else \
  	  LC_ALL=C $(RUN_TEMACS) -batch -l loadup dump || exit 1; \
  	  test "X$(PAXCTL)" = X || $(PAXCTL) -zex emacs$(EXEEXT); \
-@@ -438,8 +470,8 @@ emacs$(EXEEXT): temacs$(EXEEXT) $(etc)/DOC $(lisp) $(leimdir)/leim-list.el
+@@ -438,8 +482,8 @@ emacs$(EXEEXT): temacs$(EXEEXT) $(etc)/DOC $(lisp) $(leimdir)/leim-list.el
  ##
  $(etc)/DOC: $(libsrc)/make-docfile$(EXEEXT) $(obj) $(lisp)
  	-rm -f $(etc)/DOC
@@ -426,7 +473,7 @@ diff --git a/src/Makefile.in b/src/Makefile.in
  
  $(libsrc)/make-docfile$(EXEEXT):
  	cd $(libsrc); $(MAKE) $(MFLAGS) make-docfile$(EXEEXT)
-@@ -453,7 +485,7 @@ GLOBAL_SOURCES = $(base_obj:.o=.c) $(NS_OBJC_OBJ:.o=.m)
+@@ -453,7 +497,7 @@ GLOBAL_SOURCES = $(base_obj:.o=.c) $(NS_OBJC_OBJ:.o=.m)
  
  gl-stamp: $(libsrc)/make-docfile$(EXEEXT) $(GLOBAL_SOURCES)
  	@rm -f gl-tmp
@@ -435,7 +482,7 @@ diff --git a/src/Makefile.in b/src/Makefile.in
  	$(srcdir)/../build-aux/move-if-change gl-tmp globals.h
  	echo timestamp > $@
  
-@@ -464,7 +496,15 @@ $(lib)/libgnu.a: $(config_h)
+@@ -464,7 +508,15 @@ $(lib)/libgnu.a: $(config_h)
  
  temacs$(EXEEXT): $(START_FILES) stamp-oldxmenu $(obj) $(otherobj) $(lib)/libgnu.a
  	$(CC) $(LD_FIRSTFLAG) $(ALL_CFLAGS) $(TEMACS_LDFLAGS) $(LDFLAGS) \
@@ -452,7 +499,7 @@ diff --git a/src/Makefile.in b/src/Makefile.in
  	test "$(CANNOT_DUMP)" = "yes" || \
  	  test "X$(PAXCTL)" = X || $(PAXCTL) -r temacs$(EXEEXT)
  
-@@ -613,8 +653,12 @@ $(lispsource)/loaddefs.el: $(BOOTSTRAPEMACS) $(VCSWITNESS)
+@@ -613,8 +665,12 @@ $(lispsource)/loaddefs.el: $(BOOTSTRAPEMACS) $(VCSWITNESS)
  bootstrap-emacs$(EXEEXT): temacs$(EXEEXT)
  	cd ../lisp; $(MAKE) $(MFLAGS) update-subdirs
  	if test "$(CANNOT_DUMP)" = "yes"; then \
@@ -467,10 +514,72 @@ diff --git a/src/Makefile.in b/src/Makefile.in
  	else \
  	  $(RUN_TEMACS) --batch --load loadup bootstrap || exit 1; \
  	  test "X$(PAXCTL)" = X || $(PAXCTL) -zex emacs$(EXEEXT); \
+diff --git a/src/alloc.c b/src/alloc.c
+--- a/src/alloc.c
++++ b/src/alloc.c
+@@ -47,6 +47,11 @@ along with GNU Emacs.  If not, see <http://www.gnu.org/licenses/>.  */
+ 
+ #include <verify.h>
+ 
++#ifdef NACL_EMACS
++#include <spawn.h>
++#define pipe nacl_spawn_pipe
++#endif
++
+ /* GC_CHECK_MARKED_OBJECTS means do sanity checks on allocated objects.
+    Doable only if GC_MARK_STACK.  */
+ #if ! GC_MARK_STACK
+diff --git a/src/callproc.c b/src/callproc.c
+--- a/src/callproc.c
++++ b/src/callproc.c
+@@ -29,6 +29,11 @@ along with GNU Emacs.  If not, see <http://www.gnu.org/licenses/>.  */
+ 
+ #include "lisp.h"
+ 
++#ifdef NACL_EMACS
++#include <spawn.h>
++#define pipe nacl_spawn_pipe
++#endif
++
+ #ifdef WINDOWSNT
+ #define NOMINMAX
+ #include <windows.h>
+@@ -655,6 +660,7 @@ usage: (call-process PROGRAM &optional INFILE BUFFER DISPLAY &rest ARGS)  */)
+     {
+       if (fd[0] >= 0)
+ 	emacs_close (fd[0]);
++      message("Errno was %d", errno);
+       report_file_error ("Doing vfork", Qnil);
+     }
+ 
+@@ -1610,7 +1616,11 @@ init_callproc (void)
+ 		 Vdata_directory);
+ 
+   sh = (char *) getenv ("SHELL");
++#ifndef NACL_EMACS
+   Vshell_file_name = build_string (sh ? sh : "/bin/sh");
++#else
++  Vshell_file_name = build_string (sh ? sh : "/bin/bash");
++#endif
+ 
+ #ifdef DOS_NT
+   Vshared_game_score_directory = Qnil;
 diff --git a/src/emacs.c b/src/emacs.c
 --- a/src/emacs.c
 +++ b/src/emacs.c
-@@ -656,11 +656,27 @@ void (*__malloc_initialize_hook) (void) EXTERNALLY_VISIBLE = malloc_initialize_h
+@@ -31,6 +31,11 @@ along with GNU Emacs.  If not, see <http://www.gnu.org/licenses/>.  */
+ 
+ #include "lisp.h"
+ 
++#ifdef NACL_EMACS
++#include <spawn.h>
++#define pipe nacl_spawn_pipe
++#endif
++
+ #ifdef WINDOWSNT
+ #include <fcntl.h>
+ #include "w32.h"
+@@ -656,11 +661,27 @@ void (*__malloc_initialize_hook) (void) EXTERNALLY_VISIBLE = malloc_initialize_h
  
  #endif /* DOUG_LEA_MALLOC */
  
@@ -499,7 +608,7 @@ diff --git a/src/emacs.c b/src/emacs.c
  #if GC_MARK_STACK
    Lisp_Object dummy;
  #endif
-@@ -2113,7 +2129,7 @@ decode_env_path (const char *evarname, const char *defalt)
+@@ -2113,7 +2134,7 @@ decode_env_path (const char *evarname, const char *defalt)
      path = getenv (evarname);
    else
      path = 0;
@@ -646,6 +755,73 @@ diff --git a/src/keyboard.c b/src/keyboard.c
  #else
  # error "Cannot read without possibly delaying"
  #endif
+diff --git a/src/process.c b/src/process.c
+--- a/src/process.c
++++ b/src/process.c
+@@ -33,6 +33,11 @@ along with GNU Emacs.  If not, see <http://www.gnu.org/licenses/>.  */
+ 
+ #include "lisp.h"
+ 
++#ifdef NACL_EMACS
++#include <spawn.h>
++#define pipe nacl_spawn_pipe
++#endif
++
+ /* Only MS-DOS does not define `subprocesses'.  */
+ #ifdef subprocesses
+ 
+@@ -1588,6 +1593,22 @@ create_process_1 (struct atimer *timer)
+   /* Nothing to do.  */
+ }
+ 
++#ifdef NACL_EMACS
++/*
++ * TODO(bradnelson): Drop this when fcntl is sorted out in nacl_io.
++ * Explicitly use nacl_fcntl.
++ * When built as a shared library, without this emacs seems to hit stubs.
++ */
++static int nacl_fcntl(int fd, int cmd, ...) {
++  va_list ap;
++  va_start(ap, cmd);
++  int rtn = ki_fcntl(fd, cmd, ap);
++  va_end(ap);
++  return rtn;
++}
++#define fcntl nacl_fcntl
++#endif
++
+ 
+ static void
+ create_process (Lisp_Object process, char **new_argv, Lisp_Object current_dir)
+@@ -1663,9 +1684,13 @@ create_process (Lisp_Object process, char **new_argv, Lisp_Object current_dir)
+       tem = pipe (wait_child_setup);
+       if (tem < 0)
+ 	report_file_error ("Creating pipe", Qnil);
++      message("About to get file descriptor flags");
+       tem = fcntl (wait_child_setup[1], F_GETFD, 0);
+       if (tem >= 0)
++      {
++        message("About to set file descriptor flags");
+ 	tem = fcntl (wait_child_setup[1], F_SETFD, tem | FD_CLOEXEC);
++      }
+       if (tem < 0)
+ 	{
+ 	  emacs_close (wait_child_setup[0]);
+diff --git a/src/sysdep.c b/src/sysdep.c
+--- a/src/sysdep.c
++++ b/src/sysdep.c
+@@ -40,6 +40,11 @@ along with GNU Emacs.  If not, see <http://www.gnu.org/licenses/>.  */
+ #include "sysselect.h"
+ #include "blockinput.h"
+ 
++#ifdef NACL_EMACS
++#include <spawn.h>
++#define pipe nacl_spawn_pipe
++#endif
++
+ #ifdef BSD_SYSTEM
+ #include <sys/param.h>
+ #include <sys/sysctl.h>
 diff --git a/src/vm-limit.c b/src/vm-limit.c
 --- a/src/vm-limit.c
 +++ b/src/vm-limit.c

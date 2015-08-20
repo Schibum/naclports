@@ -14,10 +14,76 @@ set -o nounset
 shopt -s nullglob
 
 STORAGE_URL=${STORAGE_URL:-https://naclports.storage.googleapis.com/builds}
-SDK_VERSION=${SDK_VERSION:-pepper_42}
-REVISION=${REVISION:-trunk-271-gd9be8c2}
+SDK_VERSION=${SDK_VERSION:-pepper_46}
+
+# This default version for packages that are downloaded and installed.
+# To update this use 'git describe <rev>' to get the revision string.  Be
+# sure to wait until the bot have build all the packages for a given
+# revision before changing this value.
+
+REVISION=${REVISION:-trunk-583-g2ea9c03}
 DEFAULT_SOURCE="${STORAGE_URL}/${SDK_VERSION}/${REVISION}/publish"
+LOCAL_SOURCE="http://localhost:5103/"
 VERBOSE=0
+
+NACL_ARCH_ALT="${NACL_ARCH}"
+if [[ "${TOOLCHAIN}" == "pnacl" ]]; then
+  NACL_ARCH_ALT="pnacl"
+fi
+
+# Locations for package archives.
+# Prefer this one going forward:
+PACKAGE_BY_ARCH=${TOOLCHAIN}/${NACL_ARCH_ALT}.zip
+# Old default:
+PACKAGE_AS_ONE=${TOOLCHAIN}.zip
+
+# List of packages (keep sorted).
+# Pairs of <package-name>:<status><package-subdir>[:<source>:<alt-subdir>]
+PACKAGE_INFO="\
+bash|ok|${PACKAGE_BY_ARCH} \
+blackbox|WIP|${PACKAGE_BY_ARCH} \
+busybox|WIP|glibc/busybox-1.22.0.zip \
+bzip2|ok|${PACKAGE_BY_ARCH} \
+civitweb|WIP|${PACKAGE_AS_ONE} \
+coreutils|ok|${PACKAGE_BY_ARCH} \
+curl|ok|${PACKAGE_AS_ONE} \
+drod|WIP|${PACKAGE_AS_ONE} \
+emacs|ok|glibc/emacs-24.3.zip \
+findutils|ok|${PACKAGE_BY_ARCH} \
+fvwm|ok|${PACKAGE_BY_ARCH} \
+gawk|ok|${PACKAGE_BY_ARCH} \
+gforth|ok|${PACKAGE_AS_ONE} \
+git|ok|${PACKAGE_BY_ARCH} \
+grep|ok|${PACKAGE_BY_ARCH} \
+less|ok|${PACKAGE_BY_ARCH} \
+lua5.3|ok|${PACKAGE_BY_ARCH} \
+m4|ok|${PACKAGE_BY_ARCH} \
+make|ok|${PACKAGE_BY_ARCH} \
+mingn.base|ok|glibc/tarballs/base.${NACL_ARCH}.zip \
+mingn.lib|ok|glibc/tarballs/lib.all.zip \
+nano|ok|${PACKAGE_AS_ONE} \
+nethack|ok|${PACKAGE_AS_ONE} \
+ninja|WIP|${PACKAGE_BY_ARCH} \
+openssh|ok|glibc.zip \
+python3|WIP|${TOOLCHAIN}/python.zip \
+python|ok|${TOOLCHAIN}/python.zip \
+ruby|ok|${TOOLCHAIN}/ruby.zip \
+sqlite|ok|${PACKAGE_AS_ONE} \
+subversion|WIP|${PACKAGE_BY_ARCH} \
+tar|WIP|${PACKAGE_AS_ONE} \
+texlive|ok|${PACKAGE_BY_ARCH} \
+thttpd|ok|glibc.zip \
+tk|ok|${PACKAGE_BY_ARCH} \
+toybox|WIP|${TOOLCHAIN}/toybox-0.4.7.zip \
+twm|ok|${PACKAGE_BY_ARCH} \
+vim|ok|${PACKAGE_AS_ONE} \
+xeyes|ok|${PACKAGE_BY_ARCH} \
+xz|ok|${PACKAGE_BY_ARCH} \
+"
+
+ALIASES="\
+lua|lua5.3
+"
 
 RemoveDir() {
   local path="$1"
@@ -32,19 +98,26 @@ RemoveDir() {
 #
 InstallPackage() {
   local package="$1"
-  local subdir="${TOOLCHAIN}.zip"
+  local subdir="${PACKAGE_BY_ARCH}"
   local source_base="${PACKAGE_SOURCE}"
+
+  # Replace package aliases with alternates.
+  for names in ${ALIASES}; do
+    local names_array=(${names//|/ })
+    if [ "${package}" = "${names_array[0]}" ]; then
+      package="${names_array[1]}"
+    fi
+  done
 
   for info in ${PACKAGE_INFO}; do
     local info_array=(${info//|/ })
     if [ "${package}" = "${info_array[0]}" ]; then
-      if [ "${ALTERNATE_SOURCE}" == "0" ]; then
-        source_base="${info_array[1]}"
-      fi
-      if [[ "${ALTERNATE_SOURCE}" == "0" && ${#info_array[@]} > 3 && "${info_array[3]}" != "" ]]; then
-        subdir="${info_array[3]}"
-      else
-        subdir="${info_array[2]}"
+      subdir="${info_array[2]}"
+      if [[ "${ALTERNATE_SOURCE}" == "0" && \
+            ${#info_array[@]} > 3 && \
+            "${info_array[3]}" != "" ]]; then
+        source_base="${info_array[3]}"
+        subdir="${info_array[4]}"
       fi
     fi
   done
@@ -60,22 +133,22 @@ InstallPackage() {
 InstallPackageFromUrl() {
   local package=$1
   local url=$2
-  local package_dir=/mnt/html5/packages/${package}.${NACL_ARCH}
+  local package_dir=/packages/${package}.${NACL_ARCH}
   local clobber=1
 
   # Special case for MinGN.
   if [[ "${package}" = "mingn.base" || "${package}" = "mingn.lib" ]]; then
     url="${PACKAGE_SOURCE}/mingn/${subdir}"
-    package_dir="/mnt/html5"
+    package_dir="/"
     clobber=0
   fi
   # Special case for coreutils.
   if [[ "${package}" = "coreutils" ]]; then
-    package_dir="/mnt/html5/coreutils.${NACL_ARCH}"
+    package_dir="/coreutils.${NACL_ARCH}"
     clobber=0
   fi
 
-  local stamp_dir=/mnt/html5/stamps/${package}.${NACL_ARCH}
+  local stamp_dir=/stamps/${package}.${NACL_ARCH}
   local url_stamp="${stamp_dir}/${url//\//_}"
 
   if [ -d ${package_dir}/${package} ]; then
@@ -131,7 +204,7 @@ InstallPackageFromUrl() {
 
   # TODO(bradnelson): Do something better.
   # Rename appropriate nexe/pexe to unsuffixed version.
-  local suffixes=".pexe _pnacl.pexe _${NACL_ARCH}.nexe"
+  local suffixes=".pexe _pnacl.pexe _${NACL_ARCH}.nexe .nexe"
   local platform_dirs="_platform_specific/${NACL_ARCH}/ \
                        _platform_specific/all/"
   if [ "${NACL_ARCH}" = "i686" ]; then
@@ -161,6 +234,7 @@ function Usage() {
   echo "  -s <source> = alternate package source"
   echo "  -L = local package source (use with make run in naclports)"
   echo "  -f = force install"
+  echo "  -l = list known packages"
   echo "  -h = help"
   exit 1
 }
@@ -170,7 +244,7 @@ function main() {
   PACKAGE_FORCE=0
   ALTERNATE_SOURCE=0
 
-  while getopts "vs:i:hLf" o; do
+  while getopts "vs:i:hLfl" o; do
     case "${o}" in
       i)
         PACKAGE_LIST+=" ${OPTARG}"
@@ -179,13 +253,23 @@ function main() {
         PACKAGE_SOURCE="${OPTARG}"
         ;;
       L)
-        PACKAGE_SOURCE="http://localhost:5103/"
+        PACKAGE_SOURCE="${LOCAL_SOURCE}"
         ;;
       f)
         PACKAGE_FORCE=1
         ;;
       v)
         VERBOSE=1
+        ;;
+      l)
+        NEXT_COL="\\r\\x1b[30C"
+        echo -e "PACKAGE${NEXT_COL}STATUS"
+        echo -e "-------${NEXT_COL}------"
+        for info in ${PACKAGE_INFO}; do
+          local info_array=(${info//|/ })
+          echo -e "${info_array[0]}${NEXT_COL}${info_array[1]}"
+        done
+        exit 0
         ;;
       *)
         Usage
@@ -214,36 +298,14 @@ function main() {
     exit 1
   fi
 
-  NACL_ARCH_ALT="${NACL_ARCH}"
-  if [[ "${TOOLCHAIN}" == "pnacl" ]]; then
-    NACL_ARCH_ALT="pnacl"
-  fi
-
   if [ "${PACKAGE_SOURCE:-}" = "" ]; then
-    PACKAGE_SOURCE="${PACKAGE_SOURCE:-${DEFAULT_SOURCE}}"
-    ALTERNATE_SOURCE=1
+    if [ "${NACL_DEVENV_LOCAL:-}" = "1" ]; then
+      PACKAGE_SOURCE="${LOCAL_SOURCE}"
+    else
+      PACKAGE_SOURCE="${DEFAULT_SOURCE}"
+      ALTERNATE_SOURCE=1
+    fi
   fi
-
-  # Special cases for certain packages.
-  # Pairs of <package-name>:<source>:<package-subdir>[:<old-package-subdir>]
-  PACKAGE_INFO="\
-bzip2|${PACKAGE_SOURCE}|${TOOLCHAIN}/${NACL_ARCH_ALT}.zip \
-coreutils|${PACKAGE_SOURCE}|${TOOLCHAIN}/${NACL_ARCH_ALT}.zip \
-mingn.base|${PACKAGE_SOURCE}|glibc/tarballs/base.${NACL_ARCH}.zip \
-mingn.lib|${PACKAGE_SOURCE}|glibc/tarballs/lib.all.zip \
-emacs|${PACKAGE_SOURCE}|glibc/emacs-24.3.zip \
-git|${PACKAGE_SOURCE}|${TOOLCHAIN}/${NACL_ARCH_ALT}.zip \
-xz|${PACKAGE_SOURCE}|${TOOLCHAIN}/${NACL_ARCH_ALT}.zip \
-make|${PACKAGE_SOURCE}|${TOOLCHAIN}/${NACL_ARCH_ALT}.zip \
-grep|${PACKAGE_SOURCE}|${TOOLCHAIN}/${NACL_ARCH_ALT}.zip \
-ninja|${PACKAGE_SOURCE}|${TOOLCHAIN}/${NACL_ARCH_ALT}.zip \
-lua|${PACKAGE_SOURCE}|${TOOLCHAIN}/lua.zip \
-ruby|${PACKAGE_SOURCE}|${TOOLCHAIN}/ruby.zip \
-tk|${PACKAGE_SOURCE}|glibc/${NACL_ARCH_ALT}.zip \
-twm|${PACKAGE_SOURCE}|glibc/${NACL_ARCH_ALT}.zip \
-xeyes|${PACKAGE_SOURCE}|glibc/${NACL_ARCH_ALT}.zip \
-python|${PACKAGE_SOURCE}|${TOOLCHAIN}/python.zip \
-texlive|${PACKAGE_SOURCE}|${TOOLCHAIN}/${NACL_ARCH_ALT}.zip"
 
   for package in ${PACKAGE_LIST}; do
     InstallPackage ${package}

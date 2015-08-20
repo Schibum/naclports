@@ -127,7 +127,7 @@ TEST_F(DevEnvFileTest, 'testGit', function() {
          ' delete mode 100644 test.txt']);
   }).then(function() {
     return self.checkCommandReLines(
-        'cd foo && git log --full-diff -p .', 0,
+        'cd foo && PAGER=cat git log --full-diff -p .', 0,
         [/^commit [0-9a-f]{40}$/,
          'Author: John Doe <johndoe@example.com>',
          /^Date:   .+$/,
@@ -288,7 +288,7 @@ TEST_F(DevEnvFileTest, 'testCurlAndUnzip', function() {
   var self = this;
   return Promise.resolve().then(function() {
     return self.checkCommand(
-       'curl http://nacltools.storage.googleapis.com/io2014/voronoi.zip -O');
+       'curl https://nacltools.storage.googleapis.com/io2014/voronoi.zip -O');
   }).then(function() {
     return self.checkCommand('unzip voronoi.zip');
   }).then(function() {

@@ -13,3 +13,9 @@ directory of Native Client with revisions to:
 - Reduce unneeded dependencies
 - Change top-relative includes to file-relative includes
 - Add the Elf32_Dyn, Elf64_Dyn, and DT_* definitions
+
+Some more contents are added to elf*.h from freebsd source tree
+https://svnweb.freebsd.org/base/release/10.1.0/
+
+flock.c, fts.h, fts.c, err.h, err.c and timegm are pulled from freebsd 10.1 with
+some modifications.

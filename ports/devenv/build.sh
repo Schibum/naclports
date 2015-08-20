@@ -2,11 +2,17 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-export EXTRA_LIBS="${NACL_CLI_MAIN_LIB} \
-  -lppapi_simple -lnacl_io -lppapi -l${NACL_CXX_LIB}"
+export EXTRA_LIBS="${NACL_CLI_MAIN_LIB}"
+NACLPORTS_CPPFLAGS+=" -Dpipe=nacl_spawn_pipe"
 
 EXECUTABLES="tests/devenv_small_test_${NACL_ARCH}${NACL_EXEEXT} \
              jseval/jseval_${NACL_ARCH}${NACL_EXEEXT}"
+
+STORAGE_URL=${STORAGE_URL:-https://naclports.storage.googleapis.com/builds}
+SDK_VERSION=pepper_46
+BUILT_REVISION=${BUILT_REVISION:-trunk-618-g9937e26}
+DEFAULT_SOURCE=${STORAGE_URL}/${SDK_VERSION}/${BUILT_REVISION}/publish
+LOCAL_SOURCE=http://localhost:5103
 
 BuildStep() {
   SetupCrossEnvironment
@@ -26,6 +32,23 @@ BuildStep() {
       -lgtest ${EXTRA_LIBS}
 }
 
+# $1: Name of repo conf file to write to.
+# $2: The http address of repo.
+CreateRepoConfFile() {
+  echo "NACL: {" > $1
+  local PKG_ARCH=${NACL_ARCH}
+  if [ "${PKG_ARCH}" = "x86_64" ]; then
+    PKG_ARCH=x86-64
+  fi
+  if [ "${NACL_ARCH}" = "${TOOLCHAIN}" ]; then
+    echo "    url: $2/pkg_${PKG_ARCH}," >> $1
+  else
+    echo "    url: $2/pkg_${TOOLCHAIN}_${PKG_ARCH}," >> $1
+  fi
+  echo "    MIRROR_TYPE: HTTP," >> $1
+  echo "}" >> $1
+}
+
 InstallStep() {
   MakeDir ${PUBLISH_DIR}
 
@@ -33,17 +56,15 @@ InstallStep() {
   MakeDir ${APP_DIR}
 
   # Set up files for bootstrap.
-  local BASH_DIR=${NACL_PACKAGES_PUBLISH}/bash/${TOOLCHAIN}/bash
+  local BASH_DIR=${NACL_PACKAGES_PUBLISH}/bash/${TOOLCHAIN}/bash_multiarch
+  local PKG_DIR=${NACL_PACKAGES_PUBLISH}/pkg/${TOOLCHAIN}
   local GETURL_DIR=${NACL_PACKAGES_PUBLISH}/geturl/${TOOLCHAIN}
   local UNZIP_DIR=${NACL_PACKAGES_PUBLISH}/unzip/${TOOLCHAIN}
 
   LogExecute cp -fR ${BASH_DIR}/* ${APP_DIR}
-
-  # On newlib there won't be libs, so turn on null glob for these copies.
-  shopt -s nullglob
-  LogExecute cp -fR ${GETURL_DIR}/{*.nexe,*.pexe,*.nmf,lib*} ${APP_DIR}
-  LogExecute cp -fR ${UNZIP_DIR}/{*.nexe,*.pexe,*.nmf,lib*} ${APP_DIR}
-  shopt -u nullglob
+  LogExecute cp -fR ${PKG_DIR}/* ${APP_DIR}
+  LogExecute cp -fR ${GETURL_DIR}/* ${APP_DIR}
+  LogExecute cp -fR ${UNZIP_DIR}/* ${APP_DIR}
 
   # Install jseval only for pnacl (as it can't really work otherwise).
   if [ "${NACL_ARCH}" = "pnacl" ]; then
@@ -58,13 +79,20 @@ InstallStep() {
   fi
 
   # Install the HTML/JS for the terminal.
+  # TODO(gdeepti): Extend mounter to the other create_term.py apps.
   ChangeDir ${APP_DIR}
-  LogExecute python ${TOOLS_DIR}/create_term.py -i whitelist.js bash.nmf
+  LogExecute python ${TOOLS_DIR}/create_term.py -i whitelist.js \
+      -i devenv.js -i mounter.js -s mounter.css bash.nmf
   LogExecute cp bash.nmf sh.nmf
   InstallNaClTerm ${APP_DIR}
 
-  RESOURCES="background.js bash.js bashrc install-base-packages.sh package
-      graphical.html whitelist.js devenv_16.png devenv_48.png devenv_128.png"
+  # Create Nacl.conf file
+  CreateRepoConfFile "${APP_DIR}/NaCl_local.conf" "${LOCAL_SOURCE}"
+  CreateRepoConfFile "${APP_DIR}/NaCl.conf" "${DEFAULT_SOURCE}"
+
+  RESOURCES="background.js mounter.css mounter.js bash.js bashrc which
+      install-base-packages.sh package graphical.html devenv.js whitelist.js
+      devenv_16.png devenv_48.png devenv_128.png FreeBSD.conf"
   for resource in ${RESOURCES}; do
     LogExecute install ${START_DIR}/${resource} ${APP_DIR}/
   done

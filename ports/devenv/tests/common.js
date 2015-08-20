@@ -34,6 +34,8 @@ DevEnvTest.prototype.setUp = function() {
     self.tcp = ext;
     return self.initFileSystem();
   }).then(function() {
+    return self.mkdir('/home');
+  }).then(function() {
     return self.mkdir('/home/user');
   });
 };
@@ -119,6 +121,7 @@ DevEnvTest.prototype.waitCommand = function(pid) {
 DevEnvTest.prototype.runCommand = function(cmd, cmdPrefix) {
   var self = this;
   var earlyOutput;
+  chrometest.info('runCommand');
   return Promise.resolve().then(function() {
     return self.spawnCommand(cmd, cmdPrefix);
   }).then(function(msg) {
@@ -262,19 +265,6 @@ DevEnvTest.prototype.rmRf = function(fileName) {
   });
 };
 
-DevEnvTest.prototype.pipe = function() {
-  var self = this;
-  return Promise.resolve().then(function() {
-    self.devEnv.postMessage({
-      'name': 'nacl_pipe'
-    });
-    return self.devEnv.wait();
-  }).then(function(msg) {
-    ASSERT_EQ('nacl_pipe_reply', msg.name);
-    return msg.pipes;
-  });
-};
-
 /**
  * Convert an Array to a string.
  * @param {Array} arr The Array to be converted.
@@ -287,7 +277,7 @@ DevEnvTest.array2Str = function(arr) {
 /**
  * Convert a string to an Array.
  * @param {string} str The String to be converted.
- * @returns {Array}
+ * @returns {Array} Bytes sent.
  */
 DevEnvTest.str2Array = function(str) {
   var arr = [];
@@ -329,7 +319,7 @@ DevEnvTest.prototype.tcpExec_ = function(msg) {
         }
       });
   }).then(function(msg) {
-    ASSERT_EQ(reply, msg.name);
+    ASSERT_EQ(reply, msg.name, 'Error is: ' + msg.error);
     return msg;
   });
 };
@@ -355,10 +345,13 @@ DevEnvTest.prototype.tcpConnect = function(addr, port) {
  * @returns {Promise}
  */
 DevEnvTest.prototype.tcpSend = function(socket, msg) {
-  return this.tcpExec_({
+  var self = this;
+  return self.tcpExec_({
     name: 'tcp_send',
     socket: socket,
     data: DevEnvTest.str2Array(msg)
+  }).then(function(msg) {
+    return msg.data;
   });
 };
 

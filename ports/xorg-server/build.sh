@@ -32,13 +32,12 @@ if [ "${NACL_LIBC}" = "newlib" ]; then
 fi
 
 NACLPORTS_CFLAGS+=" -Dmain=SDL_main"
-export LIBS+="\
--Wl,--undefined=SDL_main \
--Wl,--undefined=nacl_startup_untar \
+export LIBS="\
 ${NACL_CLI_MAIN_LIB} \
--lSDLmain -lSDL \
--lppapi_simple -ltar -lnacl_io -lRegal -lglslopt \
--lppapi -lppapi_gles2 -lm \
+-Wl,--undefined=SDL_main \
+-Wl,--undefined=nacl_main \
+-Wl,--undefined=nacl_startup_untar \
+-lSDLmain -lSDL -lRegal -lglslopt -lppapi_gles2 -lm \
 -l${NACL_CXX_LIB}"
 
 if [ "${NACL_LIBC}" = "newlib" ]; then
@@ -81,7 +80,7 @@ InstallStep() {
       -o Xsdl.nmf
 
   # Bash is already platform specific split, copy the whole thing.
-  local BASH_DIR=${NACL_PACKAGES_PUBLISH}/bash/${TOOLCHAIN}/bash
+  local BASH_DIR=${NACL_PACKAGES_PUBLISH}/bash/${TOOLCHAIN}/bash_multiarch
   LogExecute cp -fR ${BASH_DIR}/* ${ASSEMBLY_DIR}
 
   local XKBCOMP_DIR=${NACL_PACKAGES_PUBLISH}/xkbcomp/${TOOLCHAIN}/${NACL_ARCH}
@@ -108,8 +107,11 @@ InstallStep() {
 
   ChangeDir ${NACL_PREFIX}
   LogExecute tar cvf ${ASSEMBLY_DIR}/xorg-xkb.tar share/X11/xkb
+  LogExecute shasum ${ASSEMBLY_DIR}/xorg-xkb.tar > \
+      ${ASSEMBLY_DIR}/xorg-xkb.tar.hash
   local XFONTS_DIR=${NACL_PACKAGES_PUBLISH}/xfonts/${TOOLCHAIN}
-  LogExecute cp ${XFONTS_DIR}/xorg-fonts.tar ${ASSEMBLY_DIR}/xorg-fonts.tar
+  LogExecute cp ${XFONTS_DIR}/xorg-fonts.tar ${ASSEMBLY_DIR}/
+  LogExecute cp ${XFONTS_DIR}/xorg-fonts.tar.hash ${ASSEMBLY_DIR}/
 
   ChangeDir ${PUBLISH_DIR}
   LogExecute zip -r xorg-server.zip xorg-server

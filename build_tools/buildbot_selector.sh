@@ -13,6 +13,12 @@
 set -o errexit
 set -o nounset
 
+# Use this variable to pin the naclports buildbots to a specific
+# SDK version.  This does not apply to the nightly builders, and
+# should be left unset unless there is ongoing issue with the lastest
+# SDK build.
+PINNED_SDK_VERSION=
+
 SCRIPT_DIR="$(cd $(dirname $0) && pwd)"
 NACLPORTS_SRC=$(dirname ${SCRIPT_DIR})
 DEFAULT_NACL_SDK_ROOT="${NACLPORTS_SRC}/out/nacl_sdk"
@@ -83,6 +89,7 @@ PYTHON=${SCRIPT_DIR}/python_wrapper
 
 if [ "${BUILDBOT_BUILDERNAME}" = "linux-sdk" ]; then
   readonly OS=linux
+  readonly NIGHTLY=0
 else
   # Decode buildername.
   readonly BNAME_REGEX="(nightly-|naclports-)?(.+)-(.+)-(.+)"
@@ -164,7 +171,10 @@ if [ -z "${TEST_BUILDBOT:-}" -o ! -d ${NACL_SDK_ROOT} ]; then
   echo "@@@BUILD_STEP Install Latest SDK@@@"
   ARGS=""
   if [ ${TOOLCHAIN:-} = bionic ]; then
-    ARGS="--bionic"
+    ARGS+=" --bionic"
+  fi
+  if [ "${PINNED_SDK_VERSION:-}" != "" -a "${NIGHTLY}" != "1" ]; then
+    ARGS+=" -v ${PINNED_SDK_VERSION}"
   fi
   echo ${PYTHON} ${SCRIPT_DIR}/download_sdk.py ${ARGS}
   ${PYTHON} ${SCRIPT_DIR}/download_sdk.py ${ARGS}
@@ -173,14 +183,15 @@ fi
 InstallEmscripten() {
   echo "@@@BUILD_STEP Install Emscripten SDK@@@"
   # Download the Emscripten SDK and set the environment variables
-  local DEFAULT_EMSCRIPTEN_ROOT="${NACLPORTS_SRC}/out/emsdk_portable"
-  local EMSCRIPTEN_ROOT=${EMSCRIPTEN_ROOT:-${DEFAULT_EMSCRIPTEN_ROOT}}
+  local DEFAULT_EMSCRIPTEN_ROOT="${NACLPORTS_SRC}/out/emsdk"
+  local EMSDK_ROOT=${EMSDK_ROOT:-${DEFAULT_EMSCRIPTEN_ROOT}}
+  local EMSCRIPTEN_ROOT=${EMSDK_ROOT}/emscripten
   echo ${PYTHON} ${SCRIPT_DIR}/download_emscripten.py
   ${PYTHON} ${SCRIPT_DIR}/download_emscripten.py
 
   # Mechanism by which emscripten patches can be tested on the trybots
   if [ -f "${NACLPORTS_SRC}/emscripten.patch" ]; then
-    cd ${EMSCRIPTEN_ROOT}/emscripten/master
+    cd ${EMSCRIPTEN_ROOT}
     echo "Applying emscripten.patch"
     git apply "${NACLPORTS_SRC}/emscripten.patch"
     cd -
@@ -196,8 +207,12 @@ InstallEmscripten() {
   echo "Adding node bin directory to PATH: ${node_bin}"
   export PATH=${PATH}:${node_bin}
 
-  ${EMSCRIPTEN_ROOT}/emsdk activate latest
-  source ${EMSCRIPTEN_ROOT}/emsdk_env.sh
+  export EM_CONFIG=${EMSDK_ROOT}/.emscripten
+  export EMSCRIPTEN=${EMSDK_ROOT}/emscripten
+  echo "Setting EM_CONFIG: ${EM_CONFIG} EMSCRIPTEN: ${EMSCRIPTEN}"
+
+  echo "Adding emscripten to PATH: ${EMSCRIPTEN_ROOT}"
+  export PATH=${PATH}:${EMSCRIPTEN_ROOT}
 
   # Finally, run 'emcc -v' which will check that the compiler is working
   echo "Running emcc -v"

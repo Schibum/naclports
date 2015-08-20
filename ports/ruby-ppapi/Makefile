@@ -9,7 +9,10 @@ LIBS = ruby-static readline ncurses ppapi_simple tar nacl_io ppapi
 NACL_LDFLAGS += $(NACL_CLI_MAIN_LIB)
 PNACL_LDFLAGS += $(NACL_CLI_MAIN_LIB)
 ifeq ($(TOOLCHAIN),glibc)
-LIBS += util dl rt crypt
+ifneq ($(NACL_ARCH),arm)
+LIBS += util
+endif
+LIBS += dl rt crypt
 NACL_LDFLAGS += -Wl,-export-dynamic
 else
 LIBS += c glibc-compat
@@ -85,6 +88,7 @@ install: install-hterm
 ifeq ($(TOOLCHAIN),glibc)
 	tar -h -r -C ${NACL_PREFIX} -f $(DATA_ARCHIVE) ${EXTRA_LIBS}
 endif
+	shasum $(DATA_ARCHIVE) > $(DATA_ARCHIVE).hash
 	cp $(OUTDIR)/ruby*$(EXEEXT) $(INSTALL_DIR)
 	rm -f $(INSTALL_DIR)/*_unstripped*$(EXEEXT)
 	cp $(OUTDIR)/ruby.nmf $(INSTALL_DIR)

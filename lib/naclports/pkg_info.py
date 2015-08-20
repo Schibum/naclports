@@ -10,7 +10,7 @@ from naclports.error import PkgFormatError
 VALID_KEYS = ['NAME', 'VERSION', 'URL', 'ARCHIVE_ROOT', 'LICENSE', 'DEPENDS',
               'MIN_SDK_VERSION', 'LIBC', 'DISABLED_LIBC', 'ARCH', 'CONFLICTS',
               'DISABLED_ARCH', 'URL_FILENAME', 'BUILD_OS', 'SHA1', 'DISABLED',
-              'DISABLED_TOOLCHAIN']
+              'DISABLED_TOOLCHAIN', 'TOOLCHAIN_INSTALL']
 REQUIRED_KEYS = ['NAME', 'VERSION']
 
 
@@ -42,16 +42,13 @@ def ParsePkgInfo(contents, filename, valid_keys=None, required_keys=None):
     key, value = line.split('=', 1)
     key = key.strip()
     if key not in valid_keys:
-      raise PkgFormatError("Invalid key '%s' in info file %s:%d" % (key,
-                                                                    filename,
-                                                                    line_no))
+      raise PkgFormatError("Invalid key '%s' in info file %s:%d" %
+                           (key, filename, line_no))
     value = value.strip()
     if value[0] == '(':
       if value[-1] != ')':
-        raise PkgFormatError('Error parsing %s:%d: %s (%s)' % (filename,
-                                                               line_no,
-                                                               key,
-                                                               value))
+        raise PkgFormatError('Error parsing %s:%d: %s (%s)' %
+                             (filename, line_no, key, value))
       value = value[1:-1].split()
     else:
       value = shlex.split(value)[0]
@@ -66,10 +63,10 @@ def ParsePkgInfo(contents, filename, valid_keys=None, required_keys=None):
   for i, line in enumerate(contents.splitlines()):
     if not line or line[0] == '#':
       continue
-    key, raw_value = ParsePkgInfoLine(line, i+1)
+    key, raw_value = ParsePkgInfoLine(line, i + 1)
     if key in rtn:
       raise PkgFormatError('Error parsing %s:%d: duplicate key (%s)' %
-                           (filename, i+1, key))
+                           (filename, i + 1, key))
     rtn[key] = ExpandVars(raw_value, rtn)
 
   for required_key in required_keys:

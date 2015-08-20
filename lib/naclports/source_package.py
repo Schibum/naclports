@@ -17,6 +17,7 @@ from naclports import package
 from naclports import package_index
 from naclports import util
 from naclports import paths
+from naclports import bsd_pkg
 from naclports.util import Log, Trace, LogVerbose
 from naclports.error import Error, DisabledError, PkgFormatError
 
@@ -132,11 +133,10 @@ def InitGitRepo(directory):
       RunGitCmd(directory, ['commit', '-m', 'Upstream version'])
       RunGitCmd(directory, ['checkout', '-b', 'upstream'])
       RunGitCmd(directory, ['checkout', 'master'])
-    except: # pylint: disable=bare-except
+    except:  # pylint: disable=bare-except
       # If git setup fails or is interrupted then remove the partially
       # initialized repository.
       util.RemoveTree(os.path.join(git_dir))
-
 
 
 def WriteStamp(stamp_file, stamp_contents):
@@ -178,6 +178,12 @@ class SourcePackage(package.Package):
     super(SourcePackage, self).__init__(info_file)
     if self.NAME != os.path.basename(self.root):
       raise Error('%s: package NAME must match directory name' % self.info)
+
+  def GetInstallLocation(self):
+    install_dir = 'install_%s' % util.arch_to_pkgarch[self.config.arch]
+    if self.config.arch != self.config.toolchain:
+       install_dir += '_' + self.config.toolchain
+    return os.path.join(paths.BUILD_ROOT, self.NAME, install_dir, 'payload')
 
   def GetBuildLocation(self):
     package_dir = self.ARCHIVE_ROOT or '%s-%s' % (self.NAME, self.VERSION)
@@ -276,10 +282,38 @@ class SourcePackage(package.Package):
       installed_pkg.LogStatus('Uninstalling existing')
       installed_pkg.DoUninstall()
 
-    binary_package.BinaryPackage(package_file).Install()
+    if self.TOOLCHAIN_INSTALL != '0':
+      binary_package.BinaryPackage(package_file).Install(force)
 
   def GetInstalledPackage(self):
     return package.CreateInstalledPackage(self.NAME, self.config)
+
+  def CreatePkgFile(self):
+    """Create and pkg file for use with the FreeBSD pkg tool.
+
+    This step is designed to run after the build scripts and will
+    package up any files published by the PublishByArchForDevEnv
+    step.
+    """
+    install_dir = self.GetInstallLocation()
+    if not os.path.exists(install_dir):
+      return
+
+    abi = 'pkg_' + self.config.toolchain
+    if self.config.arch != self.config.toolchain:
+      abi += "_" + util.arch_to_pkgarch[self.config.arch]
+    abi_dir = os.path.join(paths.PUBLISH_ROOT, abi)
+    pkg_file = os.path.join(abi_dir, '%s-%s.tbz' % (self.NAME,
+      self.VERSION))
+
+    util.Makedirs(abi_dir)
+
+    deps = self.DEPENDS
+    if self.config.toolchain != 'glibc':
+        deps = []
+    bsd_pkg.CreatePkgFile(self.NAME, self.VERSION, self.config.arch,
+        self.GetInstallLocation(), pkg_file, deps)
+
 
   def Build(self, build_deps, force=None):
     self.CheckBuildable()
@@ -299,8 +333,9 @@ class SourcePackage(package.Package):
     if util.log_level > util.LOG_INFO:
       log_filename = None
     else:
-      log_filename = os.path.join(log_root, '%s_%s.log' % (self.NAME,
-          str(self.config).replace('/', '_')))
+      log_filename = os.path.join(log_root, '%s_%s.log' %
+                                  (self.NAME,
+                                   str(self.config).replace('/', '_')))
       if os.path.exists(log_filename):
         os.remove(log_filename)
 
@@ -315,6 +350,7 @@ class SourcePackage(package.Package):
             self.Extract()
             self.Patch()
             self.RunBuildSh()
+            self.CreatePkgFile()
           finally:
             util.log_level = old_log_level
       except:
@@ -425,8 +461,7 @@ class SourcePackage(package.Package):
       subprocess.check_call(cmd,
                             stdout=sys.stdout,
                             stderr=sys.stderr,
-                            cwd=self.GetBuildLocation(),
-                            **args)
+                            cwd=self.GetBuildLocation(), **args)
     except subprocess.CalledProcessError as e:
       raise Error(e)
 
@@ -484,43 +519,43 @@ class SourcePackage(package.Package):
       raise DisabledError('%s: package is disabled' % self.NAME)
 
     if self.LIBC is not None and self.LIBC != self.config.libc:
-      raise DisabledError('%s: cannot be built with %s'
-                          % (self.NAME, self.config.libc))
+      raise DisabledError('%s: cannot be built with %s' %
+                          (self.NAME, self.config.libc))
 
     if self.config.libc in self.DISABLED_LIBC:
-      raise DisabledError('%s: cannot be built with %s'
-                          % (self.NAME, self.config.libc))
+      raise DisabledError('%s: cannot be built with %s' %
+                          (self.NAME, self.config.libc))
 
     for disabled_toolchain in self.DISABLED_TOOLCHAIN:
       if '/' in disabled_toolchain:
         disabled_toolchain, arch = disabled_toolchain.split('/')
         if (self.config.arch == arch and
             self.config.toolchain == disabled_toolchain):
-          raise DisabledError('%s: cannot be built with %s for %s'
-                              % (self.NAME, self.config.toolchain, arch))
+          raise DisabledError('%s: cannot be built with %s for %s' %
+                              (self.NAME, self.config.toolchain, arch))
       else:
         if self.config.toolchain == disabled_toolchain:
-          raise DisabledError('%s: cannot be built with %s'
-                              % (self.NAME, self.config.toolchain))
+          raise DisabledError('%s: cannot be built with %s' %
+                              (self.NAME, self.config.toolchain))
 
     if self.config.arch in self.DISABLED_ARCH:
-      raise DisabledError('%s: disabled for architecture: %s'
-                          % (self.NAME, self.config.arch))
+      raise DisabledError('%s: disabled for architecture: %s' %
+                          (self.NAME, self.config.arch))
 
     if self.MIN_SDK_VERSION is not None:
       if not util.CheckSDKVersion(self.MIN_SDK_VERSION):
-        raise DisabledError('%s: requires SDK version %s or above'
-                            % (self.NAME, self.MIN_SDK_VERSION))
+        raise DisabledError('%s: requires SDK version %s or above' %
+                            (self.NAME, self.MIN_SDK_VERSION))
 
     if self.ARCH is not None:
       if self.config.arch not in self.ARCH:
-        raise DisabledError('%s: disabled for architecture: %s'
-                            % (self.NAME, self.config.arch))
+        raise DisabledError('%s: disabled for architecture: %s' %
+                            (self.NAME, self.config.arch))
 
     for conflicting_package in self.CONFLICTS:
       if util.IsInstalled(conflicting_package, self.config):
         raise PkgConflictError("%s: conflicts with installed package: %s" %
-            (self.NAME, conflicting_package))
+                               (self.NAME, conflicting_package))
 
     for dep in self.Dependencies():
       try:
@@ -544,20 +579,30 @@ class SourcePackage(package.Package):
     for dep_name in self.DEPENDS:
       yield CreatePackage(dep_name, self.config)
 
+  def ReverseDependencies(self):
+    """Yields the set of packages that depend directly on this one"""
+    for pkg in SourcePackageIterator():
+      if self.NAME in pkg.DEPENDS:
+        yield pkg
+
   def TransitiveDependencies(self):
     """Yields the set of packages that this package transitively depends on"""
-    rtn = set(self.Dependencies())
-    for dep in set(rtn):
-      rtn |= dep.TransitiveDependencies()
-    return rtn
+    deps = []
+    for dep in self.Dependencies():
+      for d in dep.TransitiveDependencies():
+        if d not in deps:
+          deps.append(d)
+      if dep not in deps:
+        deps.append(dep)
+    return deps
 
   def CheckBuildable(self):
     self.CheckInstallable()
 
     if self.BUILD_OS is not None:
       if util.GetPlatform() != self.BUILD_OS:
-        raise DisabledError('%s: can only be built on %s'
-                            % (self.NAME, self.BUILD_OS))
+        raise DisabledError('%s: can only be built on %s' %
+                            (self.NAME, self.BUILD_OS))
 
   def GitCloneToMirror(self):
     """Clone the upstream git repo into a local mirror. """
@@ -569,8 +614,8 @@ class SourcePackage(package.Package):
     git_mirror = git_mirror.replace('/', '_')
     mirror_dir = os.path.join(paths.CACHE_ROOT, git_mirror)
     if os.path.exists(mirror_dir):
-      if RunGitCmd(mirror_dir,
-                   ['rev-parse', git_commit + '^{commit}'], error_ok=True) != 0:
+      if RunGitCmd(mirror_dir, ['rev-parse', git_commit + '^{commit}'],
+                   error_ok=True) != 0:
         Log('Updating git mirror: %s' % util.RelPath(mirror_dir))
         RunGitCmd(mirror_dir, ['remote', 'update', '--prune'])
     else:
@@ -647,7 +692,8 @@ class SourcePackage(package.Package):
 
     try:
       diff = subprocess.check_output(['git', 'diff', 'upstream',
-                                      '--no-ext-diff'], cwd=git_dir)
+                                      '--no-ext-diff'],
+                                     cwd=git_dir)
     except subprocess.CalledProcessError as e:
       raise Error('error running git in %s: %s' % (git_dir, str(e)))
 
@@ -655,11 +701,10 @@ class SourcePackage(package.Package):
     diff = re.sub('\nindex [^\n]+\n', '\n', diff)
 
     # Drop binary files, as they don't work anyhow.
-    diff = re.sub(
-        'diff [^\n]+\n'
-        '(new file [^\n]+\n)?'
-        '(deleted file mode [^\n]+\n)?'
-        'Binary files [^\n]+ differ\n', '', diff)
+    diff = re.sub('diff [^\n]+\n'
+                  '(new file [^\n]+\n)?'
+                  '(deleted file mode [^\n]+\n)?'
+                  'Binary files [^\n]+ differ\n', '', diff)
 
     # Filter out things from an optional per port skip list.
     diff_skip = os.path.join(self.root, 'diff_skip.txt')
@@ -711,7 +756,9 @@ def SourcePackageIterator():
     if 'pkg_info' in files:
       yield SourcePackage(root)
 
+
 DEFAULT_LOCATIONS = ('ports', 'ports/python_modules')
+
 
 def CreatePackage(package_name, config=None):
   """Create a Package object given a package name or path.

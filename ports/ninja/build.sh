@@ -4,12 +4,14 @@
 
 EXECUTABLES="ninja"
 
-LIBS+="${NACL_CLI_MAIN_LIB} -lppapi_simple -lnacl_io -lppapi"
+LIBS="${NACL_CLI_MAIN_LIB}"
 
 if [ "${NACL_LIBC}" = "newlib" ]; then
   NACLPORTS_CPPFLAGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat"
   LIBS+=" -lglibc-compat"
 fi
+
+NACLPORTS_CPPFLAGS+=" -Dpipe=nacl_spawn_pipe"
 
 BuildHostNinja() {
   # Build a host version ninja in $SRC_DIR

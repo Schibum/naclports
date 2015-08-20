@@ -14,6 +14,17 @@ _EXCLUDED_PATHS = (
     # patch_configure.py contains long lines embedded in multi-line
     # strings.
     r"^build_tools[\\\/]patch_configure.py",
+    # Many of the files in glibc-compat come from the other sources such as
+    # newlib and as such do not contain our copyright header.
+    r"^ports[\/\\]glibc-compat[\/\\]include[\/\\]err\.h",
+    r"^ports[\/\\]glibc-compat[\/\\]include[\/\\]fts\.h",
+    r"^ports[\/\\]glibc-compat[\/\\]src[\/\\]err\.c",
+    r"^ports[\/\\]glibc-compat[\/\\]src[\/\\]libc-symbols\.h",
+    r"^ports[\/\\]glibc-compat[\/\\]src[\/\\]dirfd.c",
+    r"^ports[\/\\]glibc-compat[\/\\]src[\/\\]flock.c",
+    r"^ports[\/\\]glibc-compat[\/\\]src[\/\\]fts.c",
+    r"^ports[\/\\]glibc-compat[\/\\]src[\/\\]herror.c",
+    r"^ports[\/\\]glibc-compat[\/\\]src[\/\\]timegm.c",
 )
 
 def RunPylint(input_api, output_api):
@@ -42,19 +53,6 @@ def RunCommand(name, cmd, input_api, output_api):
 
 def RunPythonCommand(cmd, input_api, output_api):
   return RunCommand(cmd[0], [PYTHON] + cmd, input_api, output_api)
-
-
-def CheckCQConfig(input_api, output_api):
-  def f(x):
-    return input_api.FilterSourceFile(x,
-        white_list=['build_tools/commit_queue/cq_config.json'])
-
-  if not input_api.AffectedFiles(file_filter=f):
-    return []
-
-  return RunPythonCommand(['build_tools/commit_queue/test_cq_config.py'],
-                          input_api,
-                          output_api)
 
 
 def CheckPartioning(input_api, output_api):
@@ -108,7 +106,6 @@ def CheckAuthorizedAuthor(input_api, output_api):
 def CheckChangeOnUpload(input_api, output_api):
   report = []
   report.extend(CheckAuthorizedAuthor(input_api, output_api))
-  report.extend(CheckCQConfig(input_api, output_api))
   report.extend(RunPylint(input_api, output_api))
   report.extend(RunUnittests(input_api, output_api))
   report.extend(CheckDeps(input_api, output_api))

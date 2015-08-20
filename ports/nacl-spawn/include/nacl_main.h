@@ -22,8 +22,7 @@ __BEGIN_DECLS
 /*
  * Entry point expected by libcli_main.a
  */
-extern int nacl_main(int argc, char* argv[])
-    __attribute__ ((visibility ("default")));
+int nacl_main(int argc, char* argv[]) __attribute__ ((visibility ("default")));
 
 /*
  * Untar a startup bundle to a particular root.
@@ -33,15 +32,16 @@ extern int nacl_main(int argc, char* argv[])
  *   arg0: The contents of argv[0], used to determine relative tar location.
  *   tarfile: The name of a tarfile to extract.
  *   root: The absolute path to extract the startup tar file to.
+ * Returns: 0 on success, non-zero on failure.
  */
-extern int nacl_startup_untar(
-    const char* argv0, const char* tarfile, const char* root);
+int nacl_startup_untar(const char* argv0, const char* tarfile,
+                       const char* root);
 
 /*
  * Setup common environment variables and mounts.
+ * Returns: 0 on success, non-zero on failure.
  */
-
-extern void nacl_setup_env();
+int nacl_setup_env(void);
 
 __END_DECLS
 

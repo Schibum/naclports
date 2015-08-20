@@ -5,13 +5,13 @@
 BUILD_DIR=${SRC_DIR}
 EXECUTABLES="src/lua src/luac"
 
+NACLPORTS_CPPFLAGS+=" -Dmain=nacl_main"
+NACLPORTS_LDFLAGS+=" ${NACL_CLI_MAIN_LIB}"
+
 if [ "${NACL_LIBC}" = "glibc" ]; then
   PLAT=nacl-glibc
 else
   PLAT=nacl-newlib
-fi
-if [ "${LUA_NO_READLINE:-}" = "1" ]; then
-  PLAT+=-basic
 fi
 
 
@@ -31,7 +31,11 @@ InstallStep() {
   ChangeDir src
   if [ "${NACL_ARCH}" = pnacl ]; then
     # Just do the x86-64 version for now.
-    TranslateAndWriteSelLdrScript lua x86-64 lua.x86-64.nexe lua.sh
-    TranslateAndWriteSelLdrScript luac x86-64 luac.x86-64.nexe luac.sh
+    TranslateAndWriteLauncherScript lua x86-64 lua.x86-64.nexe lua.sh
+    TranslateAndWriteLauncherScript luac x86-64 luac.x86-64.nexe luac.sh
   fi
+}
+
+PublishStep() {
+  PublishByArchForDevEnv
 }

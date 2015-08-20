@@ -15,6 +15,31 @@ source /mnt/http/setup-environment
 # Setup environment again, to rescan the packages added.
 source /mnt/http/setup-environment
 
+mkdir -p /usr/etc/pkg/repos
+rm -f /usr/etc/pkg/repos/FreeBSD.conf
+rm -f /usr/etc/pkg/repos/NaCl.conf
+cp /mnt/http/FreeBSD.conf /usr/etc/pkg/repos/
+if [ "${NACL_DEVENV_LOCAL:-}" = "1" ]; then
+  cp /mnt/http/NaCl_local.conf /usr/etc/pkg/repos/NaCl.conf
+else
+  cp /mnt/http/NaCl.conf /usr/etc/pkg/repos/NaCl.conf
+fi
+
+# TODO(bradnelson): Drop this when we can install things in a more
+# normal location and when we include the git templates in the normal
+# location.
+# Disabling templatedir as our git package lacks a default template set.
+# Setting up a default git identity, since we lack /etc/passwd as
+# a fallback.
+# Setup default .gitconfig if it doesn't already exist.
+# Explictly use [[ ]] conditional here in case coreutils is missing.
+gitdirs=(/stamps/git*)
+if [[ ${#dirdirs[@]} -gt 0 && ! -e /home/user/.gitconfig ]]; then
+  git config --global init.templatedir ""
+  git config --global user.name "John Doe"
+  git config --global user.email "john.doe@foo.com"
+fi
+
 cd ${HOME}
 
 if [ -e ${HOME}/.bashrc ]; then

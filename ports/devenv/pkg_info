@@ -2,8 +2,7 @@ NAME=devenv
 VERSION=0.1
 # Currently only builds on linux (due to dependency on openssl)
 BUILD_OS=linux
-DEPENDS=(bash unzip geturl)
-# Disabled since the prebuilt packages are not yet available.
-DISABLED_TOOLCHAIN=(clang-newlib emscripten)
+DEPENDS=(bash unzip geturl pkg)
+DISABLED_TOOLCHAIN=(emscripten)
 # Disabled for bionic due to bash.
 DISABLED_LIBC=(bionic)

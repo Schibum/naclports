@@ -70,6 +70,7 @@ PublishStep() {
   cp ${START_DIR}/init.el ${ASSEMBLY_DIR}/emacstar/home/user/.emacs.d
   tar cf ${ASSEMBLY_DIR}/emacs.tar .
   rm -rf ${ASSEMBLY_DIR}/emacstar
+  shasum ${ASSEMBLY_DIR}/emacs.tar > ${ASSEMBLY_DIR}/emacs.tar.hash
   cd ${ASSEMBLY_DIR}
   # TODO(petewil) this is expecting an exe, but we give it a shell script
   # since we have emacs running "unpacked", so it fails. Give it
@@ -81,7 +82,7 @@ PublishStep() {
   LogExecute python ${TOOLS_DIR}/create_term.py emacs.nmf
 
   InstallNaClTerm ${ASSEMBLY_DIR}
-  GenerateManifest ${START_DIR}/manifest.json ${ASSEMBLY_DIR}
+  GenerateManifest ${START_DIR}/manifest.json ${ASSEMBLY_DIR} "TITLE"="Emacs"
   LogExecute cp ${START_DIR}/background.js ${ASSEMBLY_DIR}
   LogExecute cp ${START_DIR}/icon_16.png ${ASSEMBLY_DIR}
   LogExecute cp ${START_DIR}/icon_48.png ${ASSEMBLY_DIR}

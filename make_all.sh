@@ -17,18 +17,21 @@ BUILD_FLAGS=--ignore-disabled
 export BUILD_FLAGS
 
 # x86_64 NaCl
-NACL_ARCH=x86_64     TOOLCHAIN=clang-newlib make ${TARGETS}
-# NACL_ARCH=x86_64     TOOLCHAIN=glibc        make ${TARGETS}
+# NACL_ARCH=x86_64     TOOLCHAIN=clang-newlib make ${TARGETS}
+NACL_ARCH=x86_64     TOOLCHAIN=glibc        make ${TARGETS}
 # NACL_ARCH=x86_64     TOOLCHAIN=newlib       make ${TARGETS}
 
 # i686 NaCl
-NACL_ARCH=i686       TOOLCHAIN=clang-newlib make ${TARGETS}
-# NACL_ARCH=i686       TOOLCHAIN=glibc        make ${TARGETS}
+# NACL_ARCH=i686       TOOLCHAIN=clang-newlib make ${TARGETS}
+NACL_ARCH=i686       TOOLCHAIN=glibc        make ${TARGETS}
 # NACL_ARCH=i686       TOOLCHAIN=newlib       make ${TARGETS}
 
 # ARM NaCl
-NACL_ARCH=arm        TOOLCHAIN=clang-newlib make ${TARGETS}
+# NACL_ARCH=arm        TOOLCHAIN=clang-newlib make ${TARGETS}
+NACL_ARCH=arm        TOOLCHAIN=glibc        make ${TARGETS}
 # NACL_ARCH=arm        TOOLCHAIN=newlib       make ${TARGETS}
+
+
 BIONIC_TOOLCHAIN="${NACL_SDK_ROOT}/toolchain/*_arm_bionic"
 if [ -n "$(shopt -s nullglob; echo ${BIONIC_TOOLCHAIN})" ]; then
   NACL_ARCH=arm      TOOLCHAIN=bionic       make ${TARGETS}

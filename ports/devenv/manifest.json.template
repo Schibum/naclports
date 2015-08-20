@@ -2,7 +2,7 @@
   "name": "NaCl Development Environment",
   "short_name": "NaCl DevEnv",
   "description": "In-browser development environment for Native Client",
-  "version": "0.1.1.%(version)s",
+  "version": "0.1.2.%(version)s",
   "manifest_version": 2,
   "minimum_chrome_version": "36",
   "icons": {
@@ -32,6 +32,13 @@
     "clipboardRead",
     "clipboardWrite",
     "unlimitedStorage",
+    {
+      "fileSystem": [
+        "write",
+	"retainEntries",
+	"directory"
+      ]
+    },
     "*://naclports.storage.googleapis.com/*",
     "*://nacltools.storage.googleapis.com/*",
     "*://0.0.0.0/*",
@@ -52,7 +59,8 @@
         "background.js",
         "pipeserver.js",
         "naclprocess.js",
-        "whitelist.js"
+        "whitelist.js",
+        "devenv.js"
       ]
     }
   },

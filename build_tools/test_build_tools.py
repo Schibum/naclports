@@ -11,6 +11,7 @@ import naclports
 import patch_configure
 import scan_packages
 import update_mirror
+from find_effected_packages import find_effected_packages
 
 
 def MockFileObject(contents):
@@ -22,17 +23,18 @@ def MockFileObject(contents):
 
 
 class TestPatchConfigure(unittest.TestCase):
+
   @patch('sys.stderr', new_callable=StringIO.StringIO)
   def testMissingFile(self, stderr):
     rtn = patch_configure.main(['non-existent/configure-script'])
     self.assertEqual(rtn, 1)
-    self.assertRegexpMatches(stderr.getvalue(),
-                             '^configure script not found: '
-                             'non-existent/configure-script$')
+    expected = '^configure script not found: non-existent/configure-script$'
+    self.assertRegexpMatches(stderr.getvalue(), expected)
 
 
 class TestScanPackages(unittest.TestCase):
-  def testCheckHash(self): # pylint: disable=no-self-use
+
+  def testCheckHash(self):  # pylint: disable=no-self-use
     file_mock = MockFileObject('1234\n')
     md5 = Mock()
     md5.hexdigest.return_value('4321')
@@ -43,14 +45,16 @@ class TestScanPackages(unittest.TestCase):
   @patch('scan_packages.Log', Mock())
   @patch('scan_packages.CheckHash')
   @patch('os.path.exists', Mock(return_value=True))
-  def testDownloadFiles(self, check_hash_mock): # pylint: disable=no-self-use
+  def testDownloadFiles(self, check_hash_mock):  # pylint: disable=no-self-use
     check_hash_mock.return_value = True
-    file_info = scan_packages.FileInfo('foo', 10, 'http://host/base', 'hashval')
+    file_info = scan_packages.FileInfo(name='foo', size=10, gsurl='gs://test',
+                                       url='http://host/base', md5='hashval')
     scan_packages.DownloadFiles([file_info])
     check_hash_mock.assert_called_once_with('dummydir/base', 'hashval')
 
 
 class TestUpdateMirror(unittest.TestCase):
+
   @patch('naclports.util.FindInPath', Mock())
   def testCheckMirror_CheckOnly(self):
     pkg = naclports.source_package.CreatePackage('zlib')
@@ -75,7 +79,8 @@ class TestUpdateMirror(unittest.TestCase):
     update_mirror.CheckMirror(options, pkg, ['file.tar.gz'])
     update_mirror.CheckMirror(options, pkg, [])
 
-    upload_mock.assert_called_once_with(options, pkg.DownloadLocation(),
+    upload_mock.assert_called_once_with(
+        options, pkg.DownloadLocation(),
         update_mirror.MIRROR_GS + '/file.tar.gz')
 
   @patch('update_mirror.CheckMirror')
@@ -97,3 +102,21 @@ class TestUpdateMirror(unittest.TestCase):
 
     update_mirror.main([])
     check_packages.assert_called_once_with(mock.ANY, mock_iter, ['foo'])
+
+
+class TestFindEffectedPackages(unittest.TestCase):
+
+   def test_non_port_files(self):
+     self.assertEqual(find_effected_packages(['foo/bar'], False), ['all'])
+
+   def test_deps(self):
+     self.assertEqual(
+         find_effected_packages(['ports/vim', 'ports/nano'], False),
+         ['vim', 'nano'])
+
+     # The common dependencies of vim and nano should only appear once in this
+     # list.
+     self.assertEqual(
+         find_effected_packages(['ports/vim', 'ports/nano'], True),
+         ['corelibs', 'glibc-compat', 'ncurses', 'zlib', 'libtar',
+          'nacl-spawn', 'vim', 'nano'])

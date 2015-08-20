@@ -68,6 +68,26 @@ if [ "${TOOLCHAIN}" = "clang-newlib" -a "${NACL_ARCH}" = "i686" ]; then
   NACLPORTS_LDFLAGS+=" -L${NACLPORTS_LIBDIR}"
 fi
 
+if [ "${TOOLCHAIN}" = "clang-newlib" -o "${TOOLCHAIN}" = "pnacl" -o \
+     "${TOOLCHAIN}" = "emscripten" ]; then
+  NACLPORTS_CLANG=1
+else
+  NACLPORTS_CLANG=0
+fi
+
+# If stderr is a tty enable clang color compiler diagnostics
+if [ -t 1 -a "${NACLPORTS_CLANG}" = "1" ]; then
+  NACLPORTS_CPPFLAGS+=" -fcolor-diagnostics"
+  NACLPORTS_LDFLAGS+=" -fcolor-diagnostics"
+fi
+
+# The new arm-nacl-gcc glibc toolchain supports color diagnostics, but older
+# x86 and bionic versions do not.
+if [ "${TOOLCHAIN}" = "glibc" -a "${NACL_ARCH}" = "arm" ]; then
+  NACLPORTS_CPPFLAGS+=" -fdiagnostics-color=auto"
+  NACLPORTS_LDFLAGS+=" -fdiagnostics-color=auto"
+fi
+
 # The NaCl version of ARM gcc emits warnings about va_args that
 # are not particularly useful
 if [ "${NACL_ARCH}" = "arm" -a "${TOOLCHAIN}" = "newlib" ]; then
@@ -99,7 +119,12 @@ fi
 # libcli_main.a has a circular dependency which makes static link fail
 # (cli_main => nacl_io => ppapi_cpp => cli_main). To break this loop,
 # you should use this instead of -lcli_main.
-export NACL_CLI_MAIN_LIB="-Xlinker -uPSUserMainGet -lcli_main -lnacl_spawn"
+export NACL_CLI_MAIN_LIB="-Xlinker -unacl_main -Xlinker -uPSUserMainGet \
+-lcli_main -lnacl_spawn -ltar -lppapi_simple -lnacl_io \
+-lppapi -l${NACL_CXX_LIB}"
+export NACL_CLI_MAIN_LIB_CPP="-Xlinker -unacl_main -Xlinker -uPSUserMainGet \
+-lcli_main -lnacl_spawn -ltar -lppapi_simple_cpp -lnacl_io \
+-lppapi_cpp -lppapi -l${NACL_CXX_LIB}"
 
 # Python variables
 NACL_PYSETUP_ARGS=""
@@ -223,6 +248,7 @@ DESTDIR_LIB=${DESTDIR}/${PREFIX}/lib
 DESTDIR_INCLUDE=${DESTDIR}/${PREFIX}/include
 
 PUBLISH_DIR="${NACL_PACKAGES_PUBLISH}/${PACKAGE_NAME}/${TOOLCHAIN}"
+PUBLISH_CREATE_NMF_ARGS="-L ${DESTDIR_LIB}"
 
 SKIP_SEL_LDR_TESTS=0
 
@@ -235,6 +261,24 @@ fi
 if [ "${NACL_ARCH}" = "x86_64" -a "${HOST_IS_32BIT}" = "1" ]; then
   echo "WARNING: Building x86_64 targets on i686 host. Cannot run tests."
   SKIP_SEL_LDR_TESTS=1
+fi
+
+if [ "${NACL_LIBC}" = "glibc" -o "${NACL_LIBC}" = "arm" ]; then
+  # The recent glibc toolchain stubs out certain functions that nacl_io
+  # provides.  Because the stubs are listed in <gnu/stubs.h>, autoconf
+  # scripts will then detect them as missing even though that in the headers
+  # and nacl_io provides them at link time.
+  export ac_cv_func_fcntl=yes
+  export ac_cv_func_select=yes
+  export ac_cv_func_connect=yes
+  export ac_cv_func_tcgetattr=yes
+  export ac_cv_func_tcsetattr=yes
+  export ac_cv_func_getrusage=yes
+  export ac_cv_func_setrusage=yes
+  export ac_cv_func_setpgid=yes
+  export ac_cv_func_getpgid=yes
+  export ac_cv_func_getgroups=yes
+  export ac_cv_func_setgroups=yes
 fi
 
 
@@ -599,13 +643,14 @@ ChangeDir() {
 
 
 Remove() {
-  local NAME="$1"
-  if VerifyPath "${NAME}"; then
-    rm -rf "${NAME}"
-  else
-    echo "Remove called with bad path."
-    exit -1
-  fi
+  for filename in $*; do
+    if VerifyPath "${filename}"; then
+      rm -rf "${filename}"
+    else
+      echo "Remove called with bad path: ${filename}"
+      exit -1
+    fi
+  done
 }
 
 
@@ -683,6 +728,43 @@ PublishByArchForDevEnv() {
   ChangeDir "${ARCH_DIR}"
   Remove "${ARCH_DIR}.zip"
   LogExecute zip -r "${ARCH_DIR}.zip" .
+}
+
+#
+# Assemble a multi-arch version for use in the devenv packaged app.
+#
+#
+PublishMultiArch() {
+  local binary=$1
+  local target=$2
+
+  if [ $# -gt 2 ]; then
+    local assembly_dir="${PUBLISH_DIR}/$3"
+  else
+    local assembly_dir="${PUBLISH_DIR}"
+  fi
+
+  local platform_dir="${assembly_dir}/_platform_specific/${NACL_ARCH}"
+  MakeDir ${platform_dir}
+  if [ "${NACL_ARCH}" = "pnacl" ]; then
+    # Add something to the per-arch directory there so the store will accept
+    # the app even if nothing else ends up there. This currently happens in
+    # the pnacl case, where there's nothing that's per architecture.
+    touch ${platform_dir}/MARKER
+
+    local exe="${assembly_dir}/${target}${NACL_EXEEXT}"
+    LogExecute ${PNACLFINALIZE} ${BUILD_DIR}/${binary} -o ${exe}
+    ChangeDir ${assembly_dir}
+    LogExecute python ${NACL_SDK_ROOT}/tools/create_nmf.py \
+        ${exe} -s . -o ${target}.nmf
+  else
+    local exe="${platform_dir}/${target}${NACL_EXEEXT}"
+    LogExecute cp ${BUILD_DIR}/${binary} ${exe}
+    ChangeDir ${assembly_dir}
+    LogExecute python ${NACL_SDK_ROOT}/tools/create_nmf.py --no-arch-prefix \
+        _platform_specific/*/${target}*${NACL_EXEEXT} \
+        -s . -o ${target}.nmf
+  fi
 }
 
 
@@ -854,6 +936,22 @@ FixupExecutablesList() {
     fi
   done
   EXECUTABLES=${executables_modified}
+}
+
+VerifySharedLibraryOrder() {
+  if [ "${NACL_LIBC}" != "glibc" ]; then
+    return
+  fi
+  # Check that pthreads comes after nacl_io + nacl_spawn in the needed order.
+  # Pthreads has interception hooks that forward directly into glibc.
+  # If it gets loaded first, nacl_io doesn't get a chance to intercept.
+  for nexe in ${EXECUTABLES:-}; do
+    echo "Verifying shared library order for ${nexe}"
+    if ! OBJDUMP=${NACLOBJDUMP} ${TOOLS_DIR}/check_needed_order.py ${nexe}; then
+      echo "error: glibc shared library order check failed"
+      exit 1
+    fi
+  done
 }
 
 
@@ -1189,15 +1287,11 @@ Validate() {
 
 
 #
-# PostBuildStep by default will validae (using ncval) any executables
+# PostBuildStep by default will validate (using ncval) any executables
 # specified in the ${EXECUTABLES} as well as create wrapper scripts
 # for running them in sel_ldr.
 #
 DefaultPostBuildStep() {
-  if [ "${NACL_ARCH}" = "emscripten" ]; then
-    return
-  fi
-
   if [ -z "${EXECUTABLES}" ]; then
     return
   fi
@@ -1220,11 +1314,13 @@ DefaultPostBuildStep() {
     # of the script is the same as the name of the executable, either without
     # any extension or with the .sh extension.
     if [[ ${nexe} == *${NACL_EXEEXT} && ! -d ${nexe%%${NACL_EXEEXT}} ]]; then
-      WriteSelLdrScript "${nexe%%${NACL_EXEEXT}}" "$(basename ${nexe})"
+      WriteLauncherScript "${nexe%%${NACL_EXEEXT}}" "$(basename ${nexe})"
     else
-      WriteSelLdrScript "${nexe}.sh" "$(basename ${nexe})"
+      WriteLauncherScript "${nexe}.sh" "$(basename ${nexe})"
     fi
   done
+
+  VerifySharedLibraryOrder
 }
 
 
@@ -1245,10 +1341,10 @@ RunSelLdrCommand() {
     local SCRIPT_32=$1_32.sh
     local SCRIPT_64=$1_64.sh
     shift
-    TranslateAndWriteSelLdrScript "${PEXE}" x86-32 "${NEXE_32}" "${SCRIPT_32}"
+    TranslateAndWriteLauncherScript "${PEXE}" x86-32 "${NEXE_32}" "${SCRIPT_32}"
     echo "[sel_ldr x86-32] ${SCRIPT_32} $*"
     "./${SCRIPT_32}" "$@"
-    TranslateAndWriteSelLdrScript "${PEXE}" x86-64 "${NEXE_64}" "${SCRIPT_64}"
+    TranslateAndWriteLauncherScript "${PEXE}" x86-64 "${NEXE_64}" "${SCRIPT_64}"
     echo "[sel_ldr x86-64] ${SCRIPT_64} $*"
     "./${SCRIPT_64}" "$@"
   else
@@ -1261,7 +1357,7 @@ RunSelLdrCommand() {
     fi
 
     local SCRIPT=${nexe}.sh
-    WriteSelLdrScript "${SCRIPT}" ${basename}
+    WriteLauncherScript "${SCRIPT}" ${basename}
     shift
     echo "[sel_ldr] ${SCRIPT} $*"
     "./${SCRIPT}" "$@"
@@ -1274,8 +1370,31 @@ RunSelLdrCommand() {
 # $1 - Script name
 # $2 - Nexe name
 #
-WriteSelLdrScript() {
+WriteLauncherScript() {
   if [ "${SKIP_SEL_LDR_TESTS}" = "1" ]; then
+    return
+  fi
+
+  if [ "${TOOLCHAIN}" = "emscripten" ]; then
+    local node=node
+    if ! which node > /dev/null ; then
+      node=nodejs
+      if ! which nodejs > /dev/null ; then
+        echo "Failed to find 'node' or 'nodejs' in PATH"
+        exit 1
+      fi
+    fi
+    cat > "$1" <<HERE
+#!/bin/bash
+
+SCRIPT_DIR=\$(dirname "\${BASH_SOURCE[0]}")
+NODE=${node}
+
+cd "\${SCRIPT_DIR}"
+exec \${NODE} $2 "\$@"
+HERE
+    chmod 750 "$1"
+    echo "Wrote script $1 -> $2"
     return
   fi
 
@@ -1290,7 +1409,7 @@ WriteSelLdrScript() {
   if [ "${NACL_LIBC}" = "glibc" ]; then
     cat > "$1" <<HERE
 #!/bin/bash
-export NACLLOG=${LOGFILE}
+export NACLVERBOSITY=-3 # LOG_ERROR
 
 SCRIPT_DIR=\$(dirname "\${BASH_SOURCE[0]}")
 SEL_LDR=${NACL_SEL_LDR}
@@ -1300,14 +1419,13 @@ LIB_PATH_DEFAULT=${NACL_SDK_LIBDIR}:${NACLPORTS_LIBDIR}
 LIB_PATH_DEFAULT=\${LIB_PATH_DEFAULT}:\${NACL_SDK_LIB}:\${SCRIPT_DIR}
 SEL_LDR_LIB_PATH=\${SEL_LDR_LIB_PATH}:\${LIB_PATH_DEFAULT}
 
-"\${SEL_LDR}" -E PATH="/bin:/usr/bin" -E TERM=\${TERM} -a -B "\${IRT}" -- \\
-    "\${NACL_SDK_LIB}/runnable-ld.so" --library-path "\${SEL_LDR_LIB_PATH}" \\
-    "\${SCRIPT_DIR}/$2" "\$@"
+"\${SEL_LDR}" -qpa -B "\${IRT}" -- "\${NACL_SDK_LIB}/runnable-ld.so" \\
+    --library-path "\${SEL_LDR_LIB_PATH}" "\${SCRIPT_DIR}/$2" "\$@"
 HERE
   else
     cat > "$1" <<HERE
 #!/bin/bash
-export NACLLOG=${LOGFILE}
+export NACLVERBOSITY=-3 # LOG_ERROR
 
 SCRIPT_DIR=\$(dirname "\${BASH_SOURCE[0]}")
 if [ \$(uname -s) = CYGWIN* ]; then
@@ -1316,16 +1434,16 @@ fi
 SEL_LDR=${NACL_SEL_LDR}
 IRT=${NACL_IRT_PATH}
 
-"\${SEL_LDR}" -E PATH="/bin:/usr/bin" -E TERM=\${TERM} -a -B "\${IRT}" -- \\
-    "\${SCRIPT_DIR}/$2" "\$@"
+"\${SEL_LDR}" -qpa -B "\${IRT}" -- "\${SCRIPT_DIR}/$2" "\$@"
 HERE
   fi
+
   chmod 750 "$1"
   echo "Wrote script $1 -> $2"
 }
 
 
-TranslateAndWriteSelLdrScript() {
+TranslateAndWriteLauncherScript() {
   local PEXE=$1
   local PEXE_FINAL=$1_final.pexe
   local ARCH=$2
@@ -1339,7 +1457,7 @@ TranslateAndWriteSelLdrScript() {
   if [ "${PEXE_FINAL}" -nt "${NEXE}" ]; then
     "${TRANSLATOR}" "${PEXE_FINAL}" -arch "${ARCH}" -o "${NEXE}"
   fi
-  WriteSelLdrScriptForPNaCl "${SCRIPT}" $(basename "${NEXE}") "${ARCH}"
+  WriteLauncherScriptPNaCl "${SCRIPT}" $(basename "${NEXE}") "${ARCH}"
 }
 
 
@@ -1349,7 +1467,7 @@ TranslateAndWriteSelLdrScript() {
 # $2 - Nexe name
 # $3 - sel_ldr architecture
 #
-WriteSelLdrScriptForPNaCl() {
+WriteLauncherScriptPNaCl() {
   local script_name=$1
   local nexe_name=$2
   local arch=$3
@@ -1370,14 +1488,13 @@ WriteSelLdrScriptForPNaCl() {
   esac
   cat > "${script_name}" <<HERE
 #!/bin/bash
-export NACLLOG=/dev/null
+export NACLVERBOSITY=-3 # LOG_ERROR
 
 SCRIPT_DIR=\$(dirname "\${BASH_SOURCE[0]}")
 SEL_LDR=${nacl_sel_ldr}
 IRT=${irt_core}
 
-"\${SEL_LDR}" -E PATH="/bin:/usr/bin" -E TERM=\${TERM} -a -B "\${IRT}" -- \\
-    "\${SCRIPT_DIR}/${nexe_name}" "\$@"
+"\${SEL_LDR}" -qpa -B "\${IRT}" -- "\${SCRIPT_DIR}/${nexe_name}" "\$@"
 HERE
   chmod 750 "${script_name}"
   echo "Wrote script ${PWD}/${script_name}"

@@ -6,9 +6,7 @@ BUILD_DIR=${SRC_DIR}
 
 BuildStep() {
   export EXTRA_CFLAGS="${NACLPORTS_CPPFLAGS} ${NACLPORTS_CFLAGS}"
-  export LDFLAGS="${NACLPORTS_LDFLAGS}"
-  LDFLAGS+=" ${NACL_CLI_MAIN_LIB} -lppapi_simple -lnacl_io -lppapi"
-  LDFLAGS+=" -l${NACL_CXX_LIB}"
+  export LDFLAGS="${NACLPORTS_LDFLAGS} ${NACL_CLI_MAIN_LIB}"
   if [ "$NACL_LIBC" = "glibc" ]; then
     LDFLAGS+=" -ldl"
   fi
@@ -18,8 +16,6 @@ BuildStep() {
 
 
 InstallStep() {
-  local PUBLISH_DIR="${NACL_PACKAGES_PUBLISH}/${PACKAGE_NAME}"
-
   MakeDir ${PUBLISH_DIR}
   local ASSEMBLY_DIR="${PUBLISH_DIR}/mongoose"
   MakeDir ${ASSEMBLY_DIR}

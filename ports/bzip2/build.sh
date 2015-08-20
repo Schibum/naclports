@@ -6,8 +6,7 @@ BUILD_DIR=${SRC_DIR}
 EXECUTABLES="bzip2"
 
 NACLPORTS_CFLAGS+=" -Dmain=nacl_main -fPIC"
-export NACLPORTS_LDFLAGS+=" ${NACL_CLI_MAIN_LIB} \
--lppapi_simple -lnacl_io -lppapi -l${NACL_CXX_LIB}"
+NACLPORTS_LDFLAGS+=" ${NACL_CLI_MAIN_LIB}"
 
 ConfigureStep() {
   return
@@ -34,7 +33,9 @@ InstallStep() {
   # that need things not available in newlib.
   MakeDir ${DESTDIR_INCLUDE}
   MakeDir ${DESTDIR_LIB}
+  MakeDir ${DESTDIR}${PREFIX}/bin
   LogExecute cp -f bzlib.h ${DESTDIR_INCLUDE}
+  LogExecute cp -f bzip2 ${DESTDIR}${PREFIX}/bin
   LogExecute chmod a+r ${DESTDIR_INCLUDE}/bzlib.h
 
   LogExecute cp -f libbz2.a ${DESTDIR_LIB}

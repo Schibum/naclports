@@ -122,12 +122,11 @@ toolchain/${OS_SUBDIR}_x86_glibc/x86_64-nacl/include
     # But also copy the debug ones.
     cp ${NACL_SDK_ROOT}/lib/glibc_${arch_alt}/Debug/* ${usr_lib_dir}/debug
 
-    local mingn_ldflags="${NACL_CLI_MAIN_LIB} -lppapi_simple -lnacl_io"
-    mingn_ldflags+=" -lppapi -lstdc++ -lm"
     # Create libmingn.so ldscripts.
     cat <<EOF > ${TOOLCHAIN_OUT_DIR}/${arch}-nacl/usr/lib/libmingn.so
 OUTPUT_FORMAT(${ld_format})
-GROUP(${mingn_ldflags})
+GROUP(-lcli_main -lnacl_spawn -lppapi_simple -lnacl_io -lppapi -lstdc++ -lm)
+EXTERN(PSUserMainGet)
 EOF
   done
 
@@ -139,8 +138,8 @@ EOF
 
   # Modify GCC's specs file. E.g.,
   # /path/to/nacl_sdk/pepper_canary/toolchain/linux_x86_glibc
-  # => /mnt/html5/mingn/toolchain/nacl_x86_glibc.
-  sed -i.bak 's@/\S*/pepper_[^/]*/toolchain/[^/]*_x86_glibc@/mnt/html5/mingn/toolchain/nacl_x86_glibc@g' \
+  # => /mingn/toolchain/nacl_x86_glibc.
+  sed -i.bak 's@/\S*/pepper_[^/]*/toolchain/[^/]*_x86_glibc@/mingn/toolchain/nacl_x86_glibc@g' \
       ${TOOLCHAIN_OUT_DIR}/lib/gcc/x86_64-nacl/4.4.3/specs
 
   CreateMingnPackage lib all

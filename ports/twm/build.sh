@@ -2,12 +2,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+EXECUTABLES="twm${NACL_EXEEXT}"
 NACLPORTS_CPPFLAGS+=" -Dmain=nacl_main"
 
-export LIBS+="\
-  -lXext -lXmu -lSM -lICE -lXt -lX11 -lxcb -lXau \
-  -Wl,--undefined=nacl_main ${NACL_CLI_MAIN_LIB} \
-  -lppapi_simple -lnacl_io -lppapi -l${NACL_CXX_LIB}"
+export LIBS="\
+  -lXext -lXmu -lSM -lICE -lXt -lX11 -lxcb -lXau ${NACL_CLI_MAIN_LIB}"
 
 if [ "${NACL_LIBC}" = "newlib" ]; then
   NACLPORTS_CPPFLAGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat"
@@ -32,6 +31,8 @@ BuildStep() {
   SetupCrossEnvironment
   LogExecute ${CC} ${CPPFLAGS} ${CFLAGS} -o twm ${SRC_DIR}/*.c *.c -I. \
     -I${SRC_DIR} ${LDFLAGS} ${LIBS}
+  LogExecute ${CC} ${CPPFLAGS} ${CFLAGS} -o twm${NACL_EXEEXT} ${SRC_DIR}/*.c\
+   *.c -I. -I${SRC_DIR} ${LDFLAGS} ${LIBS}
 }
 
 InstallStep() {
@@ -40,4 +41,11 @@ InstallStep() {
 
 PublishStep() {
   PublishByArchForDevEnv
+  ChangeDir ${PUBLISH_DIR}
+  LogExecute cp -f ${BUILD_DIR}/twm${NACL_EXEEXT} twm_${NACL_ARCH}${NACL_EXEEXT}
+  LogExecute python ${NACL_SDK_ROOT}/tools/create_nmf.py\
+   twm_*${NACL_EXEEXT} -s . -o twm.nmf
+  LogExecute python ${TOOLS_DIR}/create_term.py -n twm twm.nmf
+  InstallNaClTerm .
+  LogExecute cp -f ${START_DIR}/*.js .
 }
