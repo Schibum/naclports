@@ -1,0 +1,115 @@
+diff --git a/configure b/configure
+--- a/configure
++++ b/configure
+@@ -5291,13 +5291,13 @@ if test "$ac_test_CFLAGS" = set; then
+   CFLAGS=$ac_save_CFLAGS
+ elif test $ac_cv_prog_cc_g = yes; then
+   if test "$GCC" = yes; then
+-    CFLAGS="-g -O2"
++    CFLAGS="-g "
+   else
+     CFLAGS="-g"
+   fi
+ else
+   if test "$GCC" = yes; then
+-    CFLAGS="-O2"
++    CFLAGS=
+   else
+     CFLAGS=
+   fi
+@@ -6651,13 +6651,13 @@ if test "$ac_test_CFLAGS" = set; then
+   CFLAGS=$ac_save_CFLAGS
+ elif test $ac_cv_prog_cc_g = yes; then
+   if test "$GCC" = yes; then
+-    CFLAGS="-g -O2"
++    CFLAGS="-g"
+   else
+     CFLAGS="-g"
+   fi
+ else
+   if test "$GCC" = yes; then
+-    CFLAGS="-O2"
++    CFLAGS=""
+   else
+     CFLAGS=
+   fi
+@@ -7185,13 +7185,13 @@ if test "$ac_test_CXXFLAGS" = set; then
+   CXXFLAGS=$ac_save_CXXFLAGS
+ elif test $ac_cv_prog_cxx_g = yes; then
+   if test "$GXX" = yes; then
+-    CXXFLAGS="-g -O2"
++    CXXFLAGS="-g"
+   else
+     CXXFLAGS="-g"
+   fi
+ else
+   if test "$GXX" = yes; then
+-    CXXFLAGS="-O2"
++    CXXFLAGS=""
+   else
+     CXXFLAGS=
+   fi
+@@ -11975,7 +11975,8 @@ irix5* | irix6* | nonstopux*)
+   ;;
+ 
+ # This must be glibc/ELF.
+-linux* | k*bsd*-gnu | kopensolaris*-gnu)
++# Patched by naclports using patch_configure.py
++linux* | k*bsd*-gnu | kopensolaris*-gnu | nacl*)
+   lt_cv_deplibs_check_method=pass_all
+   ;;
+ 
+@@ -17489,6 +17490,18 @@ uts4*)
+   shlibpath_var=LD_LIBRARY_PATH
+   ;;
+ 
++nacl)
++  # Patched by naclports using patch_configure.py
++  if libc_so=`$CC -print-file-name=libc.so` && [ "$libc_so" != libc.so ]; then
++    dynamic_linker="GNU/NaCl ld.so"
++    version_type=linux
++    library_names_spec='${libname}${release}${shared_ext}$versuffix ${libname}${release}${shared_ext}${major} ${libname}${shared_ext}'
++    soname_spec='${libname}${release}${shared_ext}$major'
++  else
++    dynamic_linker=no
++  fi
++  ;;
++
+ *)
+   dynamic_linker=no
+   ;;
+@@ -21324,6 +21337,18 @@ uts4*)
+   shlibpath_var=LD_LIBRARY_PATH
+   ;;
+ 
++nacl)
++  # Patched by naclports using patch_configure.py
++  if libc_so=`$CC -print-file-name=libc.so` && [ "$libc_so" != libc.so ]; then
++    dynamic_linker="GNU/NaCl ld.so"
++    version_type=linux
++    library_names_spec='${libname}${release}${shared_ext}$versuffix ${libname}${release}${shared_ext}${major} ${libname}${shared_ext}'
++    soname_spec='${libname}${release}${shared_ext}$major'
++  else
++    dynamic_linker=no
++  fi
++  ;;
++
+ *)
+   dynamic_linker=no
+   ;;
+@@ -26104,13 +26129,13 @@ if test "$ac_test_CXXFLAGS" = set; then
+   CXXFLAGS=$ac_save_CXXFLAGS
+ elif test $ac_cv_prog_cxx_g = yes; then
+   if test "$GXX" = yes; then
+-    CXXFLAGS="-g -O2"
++    CXXFLAGS="-g "
+   else
+     CXXFLAGS="-g"
+   fi
+ else
+   if test "$GXX" = yes; then
+-    CXXFLAGS="-O2"
++    CXXFLAGS=""
+   else
+     CXXFLAGS=
+   fi

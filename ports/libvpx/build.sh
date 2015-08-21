@@ -12,6 +12,11 @@ ConfigureStep() {
   else
     conf_host=${NACL_CROSS_PREFIX}
   fi
+  enable_small=""
+  if [ "${NACL_ARCH}" = "arm" ]; then
+    enable_small="--enable-small"
+  fi
+
 
   LogExecute ${SRC_DIR}/configure \
     --enable-vp8 \
@@ -19,7 +24,8 @@ ConfigureStep() {
     --prefix=${PREFIX} \
     --disable-unit-tests \
     --disable-examples \
-    --disable-runtime_cpu_detect 
+    --disable-runtime_cpu_detect \
+    ${enable_small}
 
   make clean
 }

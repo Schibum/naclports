@@ -7,6 +7,12 @@ BUILD_DIR=${SRC_DIR}
 if [ "${NACL_LIBC}" = "newlib" ]; then
   NACLPORTS_CPPFLAGS+=" -isystem ${NACLPORTS_INCLUDE}/glibc-compat"
 fi
+# Hack for https://code.google.com/p/nativeclient/issues/detail?id=3205
+if [ "${NACL_ARCH}" = "arm" ]; then
+  NACLPORTS_CPPFLAGS+=" -O2"
+else
+  NACLPORTS_CPPFLAGS+=" -O3"
+fi
 
 if [ "${TOOLCHAIN}" = "pnacl" -o "${TOOLCHAIN}" = "clang-newlib" ]; then
   # TODO(sbc): Should probably use clang here
@@ -65,7 +71,7 @@ ConfigureStep() {
   for flag in ${NACLPORTS_CPPFLAGS}; do
     flags+=" <compileflags>${flag}"
   done
-  conf="using ${COMPILER} : ${COMPILER_VERSION} : ${NACLCXX} :${flags} ;"
+  conf="using ${COMPILER} : ${COMPILER_VERSION} : ${NACLCXX} :${flags} : <optimization>off;"
   echo $conf > tools/build/v2/user-config.jam
   LogExecute ./bootstrap.sh --prefix=${NACL_PREFIX}
 }
