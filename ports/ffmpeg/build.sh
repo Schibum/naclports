@@ -14,6 +14,14 @@ if [ "${NACL_LIBC}" = "newlib" ]; then
   NACLPORTS_CPPFLAGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat"
 fi
 
+if [ "${NACL_SHARED}" = "1" ]; then
+  NACLPORTS_CFLAGS+=" -fPIC"
+  NACLPORTS_CXXFLAGS+=" -fPIC"
+  EXECUTABLES+=
+fi
+
+
+
 ConfigureStep() {
   SetupCrossEnvironment
 
@@ -46,7 +54,7 @@ ConfigureStep() {
     --enable-filter="${FILTERS}" \
     --disable-yasm \
     --disable-asm \
-    --enable-static \
+    --enable-shared \
     --enable-cross-compile \
     --enable-protocol=file \
     --enable-libvorbis \
