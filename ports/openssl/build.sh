@@ -9,15 +9,13 @@ OS_JOBS=1
 BUILD_DIR=${SRC_DIR}
 INSTALL_TARGETS="install_sw INSTALL_PREFIX=${DESTDIR}"
 
+EnableGlibcCompat
+
 ConfigureStep() {
   if [ "${NACL_SHARED}" = "1" ] ; then
     local EXTRA_ARGS="shared"
   else
     local EXTRA_ARGS="no-dso"
-  fi
-
-  if [ "${NACL_LIBC}" = "newlib" ] ; then
-    EXTRA_ARGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat"
   fi
 
   # Workaround for arm-gcc bug:
@@ -36,25 +34,6 @@ ConfigureStep() {
     CC=${NACLCC} AR=${NACLAR} RANLIB=${NACLRANLIB} \
     LogExecute ./config \
     --prefix=${PREFIX} no-asm no-hw no-krb5 ${EXTRA_ARGS} -D_GNU_SOURCE
-
-  HackStepForNewlib
-}
-
-
-HackStepForNewlib() {
-  if [ "${NACL_SHARED}" = "1" ]; then
-    git checkout apps/Makefile
-    git checkout test/Makefile
-    return
-  fi
-
-  # apps/Makefile links programs that require socket(), etc.
-  # Stub it out until we link against nacl_io or something.
-  echo "all clean install: " > apps/Makefile
-  # test/Makefile is similar -- stub out, but keep the original for testing.
-  git checkout test/Makefile
-  mv test/Makefile test/Makefile.orig
-  echo "all clean install: " > test/Makefile
 }
 
 
@@ -71,8 +50,8 @@ InstallStep() {
   # not writable.  This causes issues when create_nmf copies the libraries
   # and then tries to overwrite them later.
   if [ "${NACL_SHARED}" = "1" ] ; then
-    LogExecute chmod 644 ${DESTDIR_LIB}/libssl.so.*
-    LogExecute chmod 644 ${DESTDIR_LIB}/libcrypto.so.*
+    LogExecute chmod 644 ${DESTDIR_LIB}/lib*.so*
+    LogExecute chmod 644 ${DESTDIR_LIB}/engines/lib*.so*
   fi
 }
 
@@ -85,21 +64,10 @@ TestStep() {
 ideatest shatest sha1test sha256t sha512t mdc2test rmdtest md4test \
 md5test hmactest wp_test rc2test rc4test bftest casttest \
 destest randtest dhtest dsatest rsa_test enginetest igetest \
-srptest asn1test"
+srptest asn1test md2test rc5test ssltest jpaketest"
   ChangeDir test
+  LogExecute make
   export SEL_LDR_LIB_PATH=$PWD/..
-  # Newlib can't build ssltest -- requires socket()
-  # md2test, rc5test, jpaketest just segfaults w/ nacl-gcc-newlib and pnacl.
-  if [ "${NACL_LIBC}" = "newlib" ]; then
-    LogExecute make -f Makefile.orig CC=${NACLCC} ${all_tests}
-    # Special case -- needs an input file =(
-    LogExecute make -f Makefile.orig CC=${NACLCC} evp_test
-  else
-    all_tests+=" md2test rc5test ssltest jpaketest"
-    # Plain make works better and doesn't muck with CC, etc.
-    # Otherwise, we end up missing -ldl for GLIBC...
-    LogExecute make
-  fi
   for test_name in ${all_tests}; do
     RunSelLdrCommand ${test_name}
   done

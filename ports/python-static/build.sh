@@ -17,6 +17,11 @@ fi
 #
 # The module downloader is patterned after the Bochs image downloading step.
 
+SetOptFlags() {
+  # Python build system sets its own opt flags
+  return
+}
+
 ConfigureStep() {
   SetupCrossEnvironment
   export CROSS_COMPILE=true
@@ -30,16 +35,16 @@ ConfigureStep() {
   EXTRA_CONFIGURE_ARGS="--disable-ipv6"
   EXTRA_CONFIGURE_ARGS+=" --with-suffix=${NACL_EXEEXT}"
   EXTRA_CONFIGURE_ARGS+=" --build=i686-linux-gnu --disable-shared --enable-static"
+  if [ "${NACL_DEBUG}" = 1 ]; then
+    EXTRA_CONFIGURE_ARGS+=" --with-pydebug"
+  fi
   export SO=.a
   export MAKEFLAGS="PGEN=${NACL_HOST_PYBUILD}/Parser/pgen"
   export LIBS="-ltermcap"
   export DYNLOADFILE=dynload_ppapi.o
   export MACHDEP=ppapi
   export LINKCC=${NACLCXX}
-  if [ "${NACL_LIBC}" = "newlib" ]; then
-    LIBS+=" -lglibc-compat"
-    NACLPORTS_CPPFLAGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat"
-  fi
+  EnableGlibcCompat
   LogExecute cp ${START_DIR}/dynload_ppapi.c ${SRC_DIR}/Python/
   # This next step is costly, but it sets the environment variables correctly.
   DefaultConfigureStep

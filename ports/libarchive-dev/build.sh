@@ -14,11 +14,11 @@ AutogenStep() {
   cd -
 }
 
-if [ "${NACL_LIBC}" = "newlib" ]; then
-  NACLPORTS_CPPFLAGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat"
-  LIBS+=" -lglibc-compat"
+if [ "${NACL_SHARED}" = "0" ]; then
   EXTRA_CONFIGURE_ARGS+=" --enable-shared=no"
 fi
+
+EnableGlibcCompat
 
 ConfigureStep() {
   AutogenStep
@@ -36,4 +36,23 @@ ConfigureStep() {
   NACLPORTS_CPPFLAGS+=" -Dtimezone=_timezone"
 
   DefaultConfigureStep
+}
+
+BuildHost() {
+  HOST_BUILD_DIR=${WORK_DIR}/build_host
+  HOST_INSTALL_DIR=${WORK_DIR}/install_host
+  if [ ! -d ${HOST_INSTALL_DIR} ]; then
+    Banner "Build host version"
+    MakeDir ${HOST_BUILD_DIR}
+    ChangeDir ${HOST_BUILD_DIR}
+    LogExecute ${SRC_DIR}/configure --without-lzma
+    LogExecute make -j${OS_JOBS}
+    LogExecute make install DESTDIR=${HOST_INSTALL_DIR}
+    cd -
+  fi
+}
+
+BuildStep() {
+  BuildHost
+  DefaultBuildStep
 }

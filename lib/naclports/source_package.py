@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import contextlib
+import fnmatch
 import os
 import re
 import subprocess
@@ -183,6 +184,8 @@ class SourcePackage(package.Package):
     install_dir = 'install_%s' % util.arch_to_pkgarch[self.config.arch]
     if self.config.arch != self.config.toolchain:
        install_dir += '_' + self.config.toolchain
+    if self.config.config_name == 'debug':
+       install_dir += '_debug'
     return os.path.join(paths.BUILD_ROOT, self.NAME, install_dir, 'payload')
 
   def GetBuildLocation(self):
@@ -190,7 +193,8 @@ class SourcePackage(package.Package):
     return os.path.join(paths.BUILD_ROOT, self.NAME, package_dir)
 
   def GetPatchFile(self):
-    return os.path.join(self.root, 'nacl.patch')
+    patch_name = self.PATCH_NAME or 'nacl.patch'
+    return os.path.join(self.root, patch_name)
 
   def GetArchiveFilename(self):
     if self.URL_FILENAME:
@@ -282,8 +286,7 @@ class SourcePackage(package.Package):
       installed_pkg.LogStatus('Uninstalling existing')
       installed_pkg.DoUninstall()
 
-    if self.TOOLCHAIN_INSTALL != '0':
-      binary_package.BinaryPackage(package_file).Install(force)
+    binary_package.BinaryPackage(package_file).Install(force)
 
   def GetInstalledPackage(self):
     return package.CreateInstalledPackage(self.NAME, self.config)
@@ -291,13 +294,24 @@ class SourcePackage(package.Package):
   def CreatePkgFile(self):
     """Create and pkg file for use with the FreeBSD pkg tool.
 
-    This step is designed to run after the build scripts and will
-    package up any files published by the PublishByArchForDevEnv
-    step.
+    Create a package from the result of the package's InstallStep.
     """
     install_dir = self.GetInstallLocation()
     if not os.path.exists(install_dir):
+      Log('Skiping pkg creation. Install dir not found: %s' % install_dir)
       return
+
+    # Strip all elf or pexe files in the install directory (except .o files
+    # since we don't want to strip, for example, crt1.o)
+    if not self.config.debug and self.config.toolchain != 'emscripten':
+      strip = util.GetStrip(self.config)
+      for root, _, files in os.walk(install_dir):
+        for filename in files:
+          fullname = os.path.join(root, filename)
+          if (os.path.isfile(fullname) and util.IsElfFile(fullname)
+              and os.path.splitext(fullname)[1] != '.o'):
+            Log('stripping: %s %s' % (strip, fullname))
+            subprocess.check_call([strip, fullname])
 
     abi = 'pkg_' + self.config.toolchain
     if self.config.arch != self.config.toolchain:
@@ -305,15 +319,12 @@ class SourcePackage(package.Package):
     abi_dir = os.path.join(paths.PUBLISH_ROOT, abi)
     pkg_file = os.path.join(abi_dir, '%s-%s.tbz' % (self.NAME,
       self.VERSION))
-
     util.Makedirs(abi_dir)
-
     deps = self.DEPENDS
     if self.config.toolchain != 'glibc':
         deps = []
     bsd_pkg.CreatePkgFile(self.NAME, self.VERSION, self.config.arch,
         self.GetInstallLocation(), pkg_file, deps)
-
 
   def Build(self, build_deps, force=None):
     self.CheckBuildable()
@@ -366,13 +377,13 @@ class SourcePackage(package.Package):
     build_port = os.path.join(paths.TOOLS_DIR, 'build_port.sh')
     cmd = [build_port]
 
+    if self.config.toolchain == 'emscripten':
+      util.SetupEmscripten()
     env = os.environ.copy()
     env['TOOLCHAIN'] = self.config.toolchain
     env['NACL_ARCH'] = self.config.arch
     env['NACL_DEBUG'] = self.config.debug and '1' or '0'
     env['NACL_SDK_ROOT'] = util.GetSDKRoot()
-    if self.config.toolchain == 'emscripten':
-      env['EMSCRIPTEN'] = util.GetEmscriptenRoot()
     rtn = subprocess.call(cmd,
                           stdout=sys.stdout,
                           stderr=sys.stderr,
@@ -706,21 +717,28 @@ class SourcePackage(package.Package):
                   '(deleted file mode [^\n]+\n)?'
                   'Binary files [^\n]+ differ\n', '', diff)
 
-    # Filter out things from an optional per port skip list.
-    diff_skip = os.path.join(self.root, 'diff_skip.txt')
-    if os.path.exists(diff_skip):
-      names = open(diff_skip).read().splitlines()
-      new_diff = ''
-      skipping = False
-      for line in diff.splitlines():
-        if line.startswith('diff --git '):
-          skipping = False
-          for name in names:
-            if line == 'diff --git a/%s b/%s' % (name, name):
-              skipping = True
-        if not skipping:
-          new_diff += line + '\n'
-      diff = new_diff
+    # Always filter out config.sub changes
+    diff_skip = ['*config.sub']
+
+    # Add optional per-port skip list.
+    diff_skip_file = os.path.join(self.root, 'diff_skip.txt')
+    if os.path.exists(diff_skip_file):
+      with open(diff_skip_file) as f:
+        diff_skip += f.read().splitlines()
+
+    new_diff = ''
+    skipping = False
+    for line in diff.splitlines():
+      if line.startswith('diff --git a/'):
+        filename = line[len('diff --git a/'):].split()[0]
+        skipping = False
+        for skip in diff_skip:
+          if fnmatch.fnmatch(filename, skip):
+            skipping = True
+            break
+      if not skipping:
+        new_diff += line + '\n'
+    diff = new_diff
 
     # Write back out the diff.
     patch_path = self.GetPatchFile()

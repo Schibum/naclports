@@ -4,15 +4,13 @@
 
 BUILD_DIR=${SRC_DIR}
 
-if [ "${NACL_LIBC}" = "newlib" ]; then
-  NACLPORTS_CPPFLAGS+=" -isystem ${NACLPORTS_INCLUDE}/glibc-compat"
-fi
 # Hack for https://code.google.com/p/nativeclient/issues/detail?id=3205
 if [ "${NACL_ARCH}" = "arm" ]; then
   NACLPORTS_CPPFLAGS+=" -O2"
 else
   NACLPORTS_CPPFLAGS+=" -O3"
 fi
+EnableGlibcCompat
 
 if [ "${TOOLCHAIN}" = "pnacl" -o "${TOOLCHAIN}" = "clang-newlib" ]; then
   # TODO(sbc): Should probably use clang here

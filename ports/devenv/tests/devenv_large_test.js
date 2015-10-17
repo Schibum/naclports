@@ -13,13 +13,15 @@ TEST_F(DevEnvTest, 'testPackageInstall', function() {
   return Promise.resolve().then(function() {
     return self.installPackage('coreutils');
   }).then(function() {
-    return self.installPackage('git');
+    return self.installPackage('zlib');
+  }).then(function() {
+    return self.installPackage('curl');
   }).then(function() {
     return self.installPackage('make');
   }).then(function() {
     return self.installPackage('python');
   }).then(function() {
-    return self.installPackage('curl');
+    return self.installPackage('git');
   });
 });
 
@@ -202,7 +204,7 @@ TEST_F(DevEnvFileTest, 'testMake', function() {
   }).then(function() {
     function checkOne() {
       return Promise.resolve().then(function() {
-        return self.readFile('/home/user/part' + i + '.z', foo);
+        return self.readFile('/home/user/part' + i + '.z');
       }).then(function(data) {
         ASSERT_EQ(foo, data);
         i++;

@@ -3,8 +3,9 @@
 # found in the LICENSE file.
 
 BuildStep() {
-  # Meta package, no build.
-  return
+  # Build a local package index of pkg files
+  Banner "Building pkg for host"
+  ${NACL_SRC}/build_tools/build_repo.sh -l
 }
 
 InstallStep() {
@@ -27,11 +28,11 @@ PostInstallTestStep() {
     LogExecute python ${START_DIR}/../devenv/devenv_large_test.py \
       -p latest=1 \
       -C ${NACL_SRC}/out \
-      -x -vv -a ${arch}
+      -x -v -a ${arch}
     # TODO(bradnelson): Enable this when dependencies are right.
     #LogExecute python ${START_DIR}/../devenv/io2014_test.py \
     #  -p latest=1 \
     #  -C ${NACL_SRC}/out \
-    #  -x -vv -a ${arch}
+    #  -x -v -a ${arch}
   done
 }

@@ -9,7 +9,7 @@
 # environment variables:
 #
 # $NACL_ARCH - i386, x86_64, arm or pnacl.  Default: x86_64
-# $TOOLCHAIN - bionic, newlib, glibc or pnacl.  Default: newlib
+# $TOOLCHAIN - bionic, clang-newlib, glibc or pnacl.  Default: pnacl
 #
 # To import these variables into your environment do:
 # $ . nacl-env.sh
@@ -76,14 +76,8 @@ fi
 # Default value for NACL_ARCH
 NACL_ARCH=${NACL_ARCH:-${DEFAULT_ARCH}}
 
-# Default Value for TOOLCHAIN, taking into account legacy
-# NACL_GLIBC varible.
-if [ "${NACL_GLIBC:-}" = "1" ]; then
-  echo "WARNING: \$NACL_GLIBC is deprecated (use \$TOOLCHAIN=glibc instead)"
-  TOOLCHAIN=${TOOLCHAIN:-glibc}
-else
-  TOOLCHAIN=${TOOLCHAIN:-newlib}
-fi
+# Default Value for TOOLCHAIN
+TOOLCHAIN=${TOOLCHAIN:-pnacl}
 
 # Check NACL_ARCH
 if [ ${NACL_ARCH} != "i686" -a ${NACL_ARCH} != "x86_64" -a \
@@ -94,7 +88,7 @@ if [ ${NACL_ARCH} != "i686" -a ${NACL_ARCH} != "x86_64" -a \
 fi
 
 # Check TOOLCHAIN
-if [ ${TOOLCHAIN} != "newlib" -a ${TOOLCHAIN} != "pnacl" -a \
+if [ ${TOOLCHAIN} != "pnacl" -a \
      ${TOOLCHAIN} != "glibc" -a ${TOOLCHAIN} != "bionic" -a \
      ${TOOLCHAIN} != "clang-newlib" -a ${TOOLCHAIN} != "emscripten" ]; then
   echo "Unknown value for TOOLCHAIN: '${TOOLCHAIN}'" 1>&2
@@ -149,25 +143,12 @@ else
   export NACL_ARCH_ALT=${NACL_ARCH}
 fi
 
-if [ ${NACL_ARCH} = "i686" ]; then
-  readonly NACL_SEL_LDR=${NACL_SDK_ROOT}/tools/sel_ldr_x86_32
-  readonly NACL_IRT=${NACL_SDK_ROOT}/tools/irt_core_x86_32.nexe
-elif [ ${NACL_ARCH} = "x86_64" ]; then
-  readonly NACL_SEL_LDR=${NACL_SDK_ROOT}/tools/sel_ldr_x86_64
-  readonly NACL_IRT=${NACL_SDK_ROOT}/tools/irt_core_x86_64.nexe
-elif [ ${NACL_ARCH} = "pnacl" ]; then
-  readonly NACL_SEL_LDR_X8632=${NACL_SDK_ROOT}/tools/sel_ldr_x86_32
-  readonly NACL_IRT_X8632=${NACL_SDK_ROOT}/tools/irt_core_x86_32.nexe
-  readonly NACL_SEL_LDR_X8664=${NACL_SDK_ROOT}/tools/sel_ldr_x86_64
-  readonly NACL_IRT_X8664=${NACL_SDK_ROOT}/tools/irt_core_x86_64.nexe
-fi
-
 # NACL_CROSS_PREFIX is the prefix of the executables in the
 # toolchain's "bin" directory. For example: i686-nacl-<toolname>.
 if [ ${NACL_ARCH} = "pnacl" ]; then
   NACL_CROSS_PREFIX=pnacl
 elif [ ${NACL_ARCH} = "emscripten" ]; then
-  NACL_CROSS_PREFIX=em
+  NACL_CROSS_PREFIX=emscripten
 else
   NACL_CROSS_PREFIX=${NACL_ARCH}-nacl
 fi
@@ -230,19 +211,7 @@ InitializeNaClGccToolchain() {
 }
 
 InitializeEmscriptenToolchain() {
-  local TC_ROOT=${NACL_SDK_ROOT}/toolchain
   local EM_ROOT=${EMSCRIPTEN}
-
-  # The PNaCl toolchain moved in pepper_31.  Check for
-  # the existence of the old folder first and use that
-  # if found.
-  if [ -d "${TC_ROOT}/${OS_SUBDIR}_x86_pnacl" ]; then
-    TC_ROOT=${TC_ROOT}/${OS_SUBDIR}_x86_pnacl/newlib
-  elif [ -d "${TC_ROOT}/${OS_SUBDIR}_pnacl/newlib" ]; then
-    TC_ROOT=${TC_ROOT}/${OS_SUBDIR}_pnacl/newlib
-  else
-    TC_ROOT=${TC_ROOT}/${OS_SUBDIR}_pnacl
-  fi
 
   readonly NACL_TOOLCHAIN_ROOT=${EM_ROOT}
   readonly NACL_BIN_PATH=${EM_ROOT}
@@ -256,8 +225,6 @@ InitializeEmscriptenToolchain() {
   NACLSTRINGS=/bin/true
   NACLSTRIP=/bin/true
   NACL_EXEEXT=".js"
-
-  LLVM=${TC_ROOT}/bin
 }
 
 InitializePNaClToolchain() {

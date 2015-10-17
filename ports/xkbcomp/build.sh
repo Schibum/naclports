@@ -7,15 +7,9 @@ EXTRA_CONFIGURE_ARGS+=" --datarootdir=/share"
 NACLPORTS_CPPFLAGS+=" -Dmain=nacl_main"
 export LIBS="-lX11 -lxcb -lXau ${NACL_CLI_MAIN_LIB}"
 
-if [ "${NACL_LIBC}" = "newlib" ]; then
-  NACLPORTS_CPPFLAGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat"
-  export LIBS+=" -lglibc-compat"
-fi
+EnableGlibcCompat
 
 InstallStep() {
-  return
-}
-
-PublishStep() {
-  PublishByArchForDevEnv
+  DefaultInstallStep
+  LogExecute mv ${DESTDIR}/share ${DESTDIR}${PREFIX}/
 }

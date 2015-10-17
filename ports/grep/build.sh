@@ -3,20 +3,12 @@
 # found in the LICENSE file.
 
 ConfigureStep() {
-  if [ "${NACL_LIBC}" = "newlib" ]; then
-    NACLPORTS_CPPFLAGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat"
-  fi
-
-  export LIBS+=" -l${NACL_CXX_LIB}"
-
+  EnableGlibcCompat
+  NACLPORTS_LIBS+=" -l${NACL_CXX_LIB}"
   NACLPORTS_CPPFLAGS+=" -Dpipe=nacl_spawn_pipe"
 
   # Grep fails to build NDEBUG defined
   # ib/chdir-long.c:62: error: unused variable 'close_fail'
   NACLPORTS_CFLAGS="${NACLPORTS_CFLAGS/-DNDEBUG/}"
   DefaultConfigureStep
-}
-
-PublishStep() {
-  PublishByArchForDevEnv
 }

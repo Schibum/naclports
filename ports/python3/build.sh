@@ -13,6 +13,11 @@ NACLPORTS_CPPFLAGS+=" -Dmain=nacl_main"
 HOST_BUILD_DIR=${WORK_DIR}/build_host
 export PATH=${HOST_BUILD_DIR}/inst/usr/local/bin:${PATH}
 
+SetOptFlags() {
+  # Python build system sets its own opt flags
+  return
+}
+
 BuildHostPython() {
   MakeDir ${HOST_BUILD_DIR}
   ChangeDir ${HOST_BUILD_DIR}
@@ -37,16 +42,24 @@ ConfigureStep() {
   EXTRA_CONFIGURE_ARGS="--disable-ipv6"
   EXTRA_CONFIGURE_ARGS+=" --with-suffix=${NACL_EXEEXT}"
   EXTRA_CONFIGURE_ARGS+=" --build=x86_64-linux-gnu"
-  export LIBS="-ltermcap"
-  LIBS+=" ${NACL_CLI_MAIN_LIB}"
+  if [ "${NACL_DEBUG}" = 1 ]; then
+    EXTRA_CONFIGURE_ARGS+=" --with-pydebug"
+  fi
+  if [ "${TOOLCHAIN}" = "glibc" -a "${NACL_ARCH}" = "arm" ]; then
+    # Ignore sys/xattr.h, since glibc/arm toolchain does not define
+    # XATTR_SIZE_MAX:
+    # https://code.google.com/p/nativeclient/issues/detail?id=4300
+    export ac_cv_header_sys_xattr_h=no
+  fi
+  NACLPORTS_LIBS+=" -ltermcap"
+  NACLPORTS_LIBS+=" ${NACL_CLI_MAIN_LIB}"
   if [ "${NACL_LIBC}" = "newlib" ]; then
-    NACLPORTS_CPPFLAGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat"
-    LIBS+=" -lglibc-compat"
     # When python builds with wait3/wait4 support it also expects struct rusage
     # to have certain fields and newlib lacks.
     export ac_cv_func_wait3=no
     export ac_cv_func_wait4=no
   fi
+  EnableGlibcCompat
   DefaultConfigureStep
   if [ "${NACL_LIBC}" = "newlib" ]; then
     LogExecute cp ${START_DIR}/Setup.local Modules/

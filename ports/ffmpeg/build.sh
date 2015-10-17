@@ -4,10 +4,8 @@
 
 # EXECUTABLES="ffmpeg ffmpeg_g ffprobe ffprobe_g"
 
-if [ "${NACL_LIBC}" = "newlib" ]; then
-  # needed for RLIMIT_CPU
-  NACLPORTS_CPPFLAGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat"
-fi
+# needed for RLIMIT_CPU
+EnableGlibcCompat
 
 if [ "${NACL_LIBC}" = "newlib" ]; then
   # needed for RLIMIT_CPU
@@ -23,6 +21,7 @@ fi
 
 
 ConfigureStep() {
+
   SetupCrossEnvironment
 
   local extra_args=""

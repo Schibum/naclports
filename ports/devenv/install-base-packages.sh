@@ -7,9 +7,11 @@
 # until the installation is completed. Also, you cannot use features
 # which nacl_io does not support yet (e.g., pipes and sub-shells).
 
+set -e
+
 CheckNaClEnabled() {
   # Skip check on if this isn't newlib.
-  if [[ "${TOOLCHAIN}" != newlib ]]; then
+  if [[ ${TOOLCHAIN} != newlib ]]; then
     return
   fi
   TMP_CHECK_FILE="/tmp/.enable_nacl_check.nexe"
@@ -18,6 +20,7 @@ CheckNaClEnabled() {
     geturl -q _platform_specific/${NACL_ARCH}/bash.nexe \
       ${TMP_CHECK_FILE} || exit 1
   fi
+  set +e
   ${TMP_CHECK_FILE} -c 'exit 42'
   if [[ $? != 42 ]]; then
     echo "*********************** ERROR ***********************"
@@ -31,41 +34,66 @@ CheckNaClEnabled() {
     echo "Follow this issue: https://crbug.com/477808"
     echo
     echo "*********************** ERROR ***********************"
-    // TODO: A more proper way to handle error would be "exit 1" here
-    // and keep window open so that error message could be shown.
+    # TODO: A more proper way to handle error would be "exit 1" here
+    # and keep window open so that error message could be shown.
     while [[ 1 == 1 ]]; do
       read
     done
   fi
+  set -e
 }
 
 InstallBasePackages() {
-  # Core packages.
-  local default_packages="\
-    -i coreutils \
-    -i bash \
-    -i curl \
-    -i findutils \
-    -i grep \
-    -i git \
-    -i less \
-    -i make \
-    -i nano \
-    -i python \
-    -i grep \
-    -i vim"
+  echo "===> Installing core packages"
+  local core_packages="
+    coreutils \
+    bash \
+    curl \
+    git \
+    make"
 
-  local have_gcc=0
-  if [[ "${NACL_ARCH}" == "i686" || "${NACL_ARCH}" == "x86_64" ]]; then
-    default_packages+=" \
-  -i emacs \
-  -i mingn.base \
-  -i mingn.lib"
-    have_gcc=1
+  if [[ -f /usr/etc/pkg/repos/NaCl.conf ]]; then
+    pkg install -y $core_packages
+  else
+    if [ "${NACL_DEVENV_LOCAL:-}" = "1" ]; then
+      local repos_dir=/mnt/http/repos_local_${NACL_ARCH}
+    else
+      local repos_dir=/mnt/http/repos_${NACL_ARCH}
+    fi
+    pkg -R $repos_dir install -y $core_packages
+
+    echo "===> Setting up pkg"
+    # Now that we have coreutils installed we can copy the pkg config
+    # files into place with 'cp'
+    mkdir -p /usr/etc/pkg/repos
+    rm -f /usr/etc/pkg/repos/NaCl.conf
+    cp $repos_dir/NaCl.conf /usr/etc/pkg/repos/
+    pkg update
   fi
 
-  # Check for updates on some packages.
-  package ${default_packages[@]} $@
+  echo "===> Installing extra packages"
+  local extra_packages="
+    findutils \
+    grep \
+    less \
+    nano \
+    python \
+    emacs \
+    vim"
+  pkg install -y -U $extra_packages
+
+  local have_gcc=0
+  if [[ ${TOOLCHAIN} == glibc ]]; then
+    if [[ ${NACL_ARCH} == i686 || ${NACL_ARCH} == x86_64 ]]; then
+      echo "===> Installing compiler packages"
+      dev_packages+=" \
+    binutils \
+    gcc \
+    mingn"
+      have_gcc=1
+      pkg install -y -U $dev_packages
+    fi
+  fi
 
   if [[ ${have_gcc} == 0 ]]; then
     echo "WARNING: \

@@ -45,13 +45,10 @@ EXECUTABLES="\
   fvwm/fvwm${NACL_EXEEXT} \
   bin/fvwm-root${NACL_EXEEXT}"
 
-export LIBS+="\
+NACLPORTS_LIBS+="\
   -lXext -lXmu -lSM -lICE -lXt -lX11 -lxcb -lXau -lm ${NACL_CLI_MAIN_LIB}"
 
-if [ "${NACL_LIBC}" = "newlib" ]; then
-  NACLPORTS_CPPFLAGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat"
-  export LIBS+=" -lglibc-compat"
-fi
+EnableGlibcCompat
 
 if [ "${TOOLCHAIN}" = "pnacl" ]; then
   NACLPORTS_CPPFLAGS+=" -Wno-return-type"
@@ -61,8 +58,4 @@ InstallStep() {
   DefaultInstallStep
   # Remove dangling symlinks
   Remove ${DESTDIR}${PREFIX}/bin/fvwm2 ${DESTDIR}${PREFIX}/bin/xpmroot
-}
-
-PublishStep() {
-  PublishByArchForDevEnv
 }

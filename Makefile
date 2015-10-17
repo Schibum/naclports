@@ -11,9 +11,6 @@
 # Each port has a dependency on its own sentinel file, which can be found
 # at out/sentinels/*
 
-SDK_LIBS = zlib tiff jpeg8d libpng freetype libogg
-SDK_LIBS += libtheora libvorbis libxml2 tinyxml openal-soft freealut
-
 PYLINT = build_tools/python_wrapper -m pylint
 COVERAGE = bin/coverage
 COVERAGE_ARGS = --fail-under=60
@@ -50,15 +47,9 @@ endif
 
 export NACL_ARCH
 export TOOLCHAIN
-export NACL_GLIBC
 
 all:
 	bin/naclports --all install $(BUILD_FLAGS)
-
-sdklibs: $(SDK_LIBS)
-
-sdklibs_list:
-	@echo $(SDK_LIBS)
 
 run:
 	./build_tools/httpd.py

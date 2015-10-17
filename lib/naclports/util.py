@@ -48,6 +48,9 @@ LOG_INFO = 2
 LOG_VERBOSE = 3
 LOG_TRACE = 4
 
+ELF_MAGIC = '\x7fELF'
+PEXE_MAGIC = 'PEXE'
+
 log_level = LOG_INFO
 color_mode = 'auto'
 
@@ -62,6 +65,22 @@ def Color(message, color):
 def CheckStdoutForColorSupport():
   if color_mode == 'auto':
     Color.enabled = sys.stdout.isatty()
+
+
+def IsElfFile(filename):
+  if os.path.islink(filename):
+    return False
+  with open(filename) as f:
+    header = f.read(4)
+  return header == ELF_MAGIC
+
+
+def IsPexeFile(filename):
+  if os.path.islink(filename):
+    return False
+  with open(filename) as f:
+    header = f.read(4)
+  return header == PEXE_MAGIC
 
 
 def Memoize(f):
@@ -231,6 +250,26 @@ def GetEmscriptenRoot():
   return emscripten
 
 
+def SetupEmscripten():
+  if 'EMSCRIPTEN' in os.environ:
+    return
+
+  local_root = GetEmscriptenRoot()
+  os.environ['EMSCRIPTEN'] = local_root
+  os.environ['EM_CONFIG'] = os.path.join(os.path.dirname(local_root),
+                                         '.emscripten')
+  try:
+    FindInPath('node')
+  except error.Error:
+    node_bin = os.path.join(paths.OUT_DIR, 'node', 'bin')
+    if not os.path.isdir(node_bin):
+      raise error.Error('node not found in path and default path not found: %s'
+                        % node_bin)
+
+    os.environ['PATH'] += ':' + node_bin
+    FindInPath('node')
+
+
 @Memoize
 def GetSDKVersion():
   """Returns the version (as a string) of the current SDK."""
@@ -259,25 +298,35 @@ def GetPlatform():
   platform = subprocess.check_output([getos]).strip()
   return platform
 
+@Memoize
+def GetToolchainRoot(config):
+  """Returns the toolchain folder for a given NaCl toolchain."""
+  if config.toolchain == 'emscripten':
+    return GetEmscriptenRoot()
+
+  platform = GetPlatform()
+  if config.toolchain in ('pnacl', 'clang-newlib'):
+    tc_dir = os.path.join('%s_pnacl' % platform)
+  else:
+    tc_arch = {'arm': 'arm', 'i686': 'x86', 'x86_64': 'x86'}[config.arch]
+    tc_dir = '%s_%s_%s' % (platform, tc_arch, config.libc)
+
+  return os.path.join(GetSDKRoot(), 'toolchain', tc_dir)
+
 
 @Memoize
 def GetInstallRoot(config):
-  """Returns the toolchain folder for a given NaCl toolchain."""
+  """Returns the naclports install location given NaCl configuration."""
+  tc_dir = GetToolchainRoot(config)
+
   if config.toolchain == 'emscripten':
-    return os.path.join(GetEmscriptenRoot(), 'system', 'local')
+    return os.path.join(tc_dir, 'system', 'local')
 
-  platform = GetPlatform()
   if config.toolchain == 'pnacl':
-    tc_dir = os.path.join('%s_pnacl' % platform, 'le32-nacl')
+    tc_dir = os.path.join(tc_dir, 'le32-nacl')
   else:
-    tc_arch = {'arm': 'arm', 'i686': 'x86', 'x86_64': 'x86'}[config.arch]
-    if config.toolchain == 'clang-newlib':
-      tc_dir = '%s_pnacl' % platform
-    else:
-      tc_dir = '%s_%s_%s' % (platform, tc_arch, config.toolchain)
     tc_dir = os.path.join(tc_dir, '%s-nacl' % config.arch)
-
-  return os.path.join(GetSDKRoot(), 'toolchain', tc_dir, 'usr')
+  return os.path.join(tc_dir, 'usr')
 
 
 @Memoize
@@ -285,6 +334,17 @@ def GetInstallStampRoot(config):
   """Returns the installation metadata folder for the give configuration."""
   tc_root = GetInstallRoot(config)
   return os.path.join(tc_root, 'var', 'lib', 'npkg')
+
+
+@Memoize
+def GetStrip(config):
+  tc_dir = GetToolchainRoot(config)
+  if config.toolchain == 'pnacl':
+    strip = os.path.join(tc_dir, 'bin', 'pnacl-strip')
+  else:
+    strip = os.path.join(tc_dir, 'bin', '%s-nacl-strip' % config.arch)
+  assert os.path.exists(strip), 'strip executable not found: %s' % strip
+  return strip
 
 
 def GetInstallStamp(package_name, config):

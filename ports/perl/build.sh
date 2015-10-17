@@ -18,15 +18,14 @@ NACLPORTS_LDFLAGS+=" ${NACL_CLI_MAIN_LIB}"
 # we need a working perl on host to build things for target
 HOST_BUILD=${WORK_DIR}/build_host
 ARCH_DIR=${PUBLISH_DIR}/${NACL_ARCH}
-LIBS=" ${NACL_CLI_MAIN_LIB}"
+NACLPORTS_LIBS=" ${NACL_CLI_MAIN_LIB}"
 # PNaCl and newlib dont have dynamic loading, so
 # using Perl's internal stub file dl_none.xs
 # specifically for systems which do not support it
 # Also, FILE pointer is structured a bit differently
 # Relevant stdio parameters found via sel_ldr on Linux
 if [ "${NACL_LIBC}" = "newlib" -o "${NACL_ARCH}" = "pnacl" ] ; then
-  NACLPORTS_CFLAGS+=" -I${NACLPORTS_INCLUDE}/glibc-compat "
-  LIBS+=" -lm -ltar -lglibc-compat "
+  NACLPORTS_LIBS+=" -lm -ltar"
   DYNAMIC_EXT=""
   NACL_GLIBC_DEF="undef"
   PERL_STDIO_BASE="(((fp)->_bf)._base)"
@@ -36,7 +35,7 @@ if [ "${NACL_LIBC}" = "newlib" -o "${NACL_ARCH}" = "pnacl" ] ; then
   PERL_DLSRC="dl_none.xs"
   NACLPORTS_CCDLFLAGS=""
 else
-  LIBS+=" -ldl -lm -ltar"
+  NACLPORTS_LIBS+=" -ldl -lm -ltar"
   # disabled DB_File GDBM_File NDBM_File ODBM_File
   DYNAMIC_EXT="arybase attributes B Compress/Raw/Bzip2 Compress/Raw/Zlib \
                Cwd Data/Dumper Devel/Peek Devel/PPPort Digest/MD5 Digest/SHA \
@@ -61,15 +60,16 @@ if [ "${NACL_ARCH}" = "pnacl" ] ; then
   NONXS_EXT="Errno"
 fi
 
+EnableGlibcCompat
+
 # BuildHostMiniperl builds miniperl for host, which is needed for
 # building Perl for the target
 BuildHostMiniperl() {
   if [ ! -x ${HOST_BUILD}/miniperl ]; then
     MakeDir ${HOST_BUILD}
     ChangeDir ${SRC_DIR}
-    LogExecute ${SRC_DIR}/Configure -des -Dprefix=${HOST_BUILD} \
-      -DNACL_BUILD=host
-    LogExecute make -j${OS_JOBS} NACL_BUILD=host miniperl
+    LogExecute ${SRC_DIR}/Configure -des -Dprefix=${HOST_BUILD}
+    LogExecute make -j${OS_JOBS} miniperl
     LogExecute cp miniperl ${HOST_BUILD}
   fi
 }
@@ -107,12 +107,7 @@ SedWork() {
   sed -i "s%\${PERL_DLSRC}%${PERL_DLSRC}%g" $1
   sed -i "s%\$UNDEF_FOR_I686%${UNDEF_FOR_I686}%g" $1
   sed -i "s%\${NONXS_EXT}%${NONXS_EXT}%g" $1
-}
-
-# copy perl_pepper.c to source directory for core perl
-PatchStep() {
-  DefaultPatchStep
-  LogExecute cp ${START_DIR}/perl_pepper.c ${SRC_DIR}
+  sed -i "s%\$DESTDIR%${DESTDIR}/${PREFIX}%g" $1
 }
 
 ConfigureStep() {
@@ -147,27 +142,44 @@ BuildStep() {
   LogExecute ${BUILD_CC} -c -DPERL_CORE -fwrapv -fno-strict-aliasing -pipe \
     -O2 -Wall generate_uudmap.c
   LogExecute ${BUILD_LD} -o generate_uudmap generate_uudmap.o -lm
-  LogExecute make -j${OS_JOBS} libs="${LIBS}" all
+  LogExecute make -j${OS_JOBS} libs="${NACLPORTS_LIBS}" all
   # test_prep prepares the perl for tests, might use this later
-  LogExecute make -j${OS_JOBS} libs="${LIBS}" test_prep
-  # clean removes everything, so moving in microperl
+  LogExecute make -j${OS_JOBS} libs="${NACLPORTS_LIBS}" test_prep
   LogExecute mv -f ${HOST_BUILD}/microperl ${SRC_DIR}
 }
 
 InstallStep() {
-  # microperl, perl don't require make install
-  return
+  if [ "${NACL_LIBC}" == "glibc" ] ; then
+    # Install without man files due to the following bug
+    # https://rt.perl.org/Public/Bug/Display.html?id=123532
+    LogExecute make -j${OS_JOBS} libs="${NACLPORTS_LIBS}" install.perl
+  else
+    MakeDir ${DESTDIR_LIB}
+    LogExecute cp -rf ${SRC_DIR}/lib/* ${DESTDIR_LIB}/
+    MakeDir ${DESTDIR_BIN}
+    LogExecute cp -f ${SRC_DIR}/{perl,microperl} ${DESTDIR_BIN}/
+  fi
 }
 
-PublishStep() {
-  MakeDir ${ARCH_DIR}
-  TAR_DIR=${ARCH_DIR}/perltar
-  MakeDir ${TAR_DIR}
-  ChangeDir ${TAR_DIR}
-  LogExecute cp -rf ${SRC_DIR}/lib ${TAR_DIR}
-  LogExecute tar cf ${ARCH_DIR}/perl.tar .
-  LogExecute shasum ${ARCH_DIR}/perl.tar > ${ARCH_DIR}/perl.tar.hash
-  ChangeDir ${SRC_DIR}
-  LogExecute rm -rf ${TAR_DIR}
-  PublishByArchForDevEnv
+TestStep() {
+  export NACL_SDK_ROOT
+  export TOOLCHAIN
+
+  # skip for pnacl
+  if [ "${NACL_ARCH}" = "pnacl" ] ; then
+    return
+  fi
+
+  # ignore error messages for now
+  echo "Running ${START_DIR}/tests.sh"
+  ${START_DIR}/tests.sh 2>tests_err.txt 1>tests_out.txt
+  EXPECTED=${START_DIR}/expected_${TOOLCHAIN}.txt
+  if ! cmp tests_out.txt ${EXPECTED}; then
+    echo "Test output did not match expected output"
+    echo "See ${PWD}/tests_err.txt"
+    diff -u tests_out.txt ${EXPECTED}
+    exit 1
+  fi
+
+  echo "PASSED"
 }

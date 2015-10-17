@@ -8,10 +8,10 @@ import os
 import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.join(SCRIPT_DIR, '../..'))
 SRC_DIR = os.path.dirname(os.path.dirname(SCRIPT_DIR))
+sys.path.append(SRC_DIR)
 TOOLCHAIN = os.environ.get('TOOLCHAIN', 'newlib')
-DEVENV_OUT_DIR = os.path.join(SRC_DIR, 'out/publish/devenv', TOOLCHAIN)
+DEVENV_OUT_DIR = os.path.join(SRC_DIR, 'out', 'publish', 'devenv', TOOLCHAIN)
 
 import chrome_test
 
@@ -22,7 +22,7 @@ test_dir = os.path.join(SCRIPT_DIR, 'tests')
 chrome_test.Main([
     '-C', test_dir,
     '-p', 'TOOLCHAIN=' + TOOLCHAIN,
-    '-t', '120',
+    '-t', '180',
     '--enable-nacl',
     '--load-extension', app,
     'devenv_large_test.html'] + sys.argv[1:])
