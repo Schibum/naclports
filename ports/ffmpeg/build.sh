@@ -38,6 +38,13 @@ ConfigureStep() {
   else
     extra_args+=" --arch=x86"
   fi
+
+  if [ "${NACL_SHARED}" = "1" ]; then
+    extra_args+=" --enable-shared"
+  else
+    extra_args+=" --enable-static"
+  fi
+
   FILTERS="copy,null,anull,scale,resample,movie,amovie,crop,pad,apad,atrim,\
     trim,sine,setpts,asetpts,volume,aevalsrc,aeval,aresample,aformat,format,\
     amix,overlay"
@@ -53,7 +60,6 @@ ConfigureStep() {
     --enable-filter="${FILTERS}" \
     --disable-yasm \
     --disable-asm \
-    --enable-shared \
     --enable-cross-compile \
     --enable-protocol=file \
     --enable-libvorbis \
