@@ -11,17 +11,17 @@ else
   EXE_DIR=".libs/"
 fi
 
-# TODO: Remove when this is fixed.
-# https://code.google.com/p/nativeclient/issues/detail?id=3205
-if [ "$NACL_ARCH" = "arm" ]; then
-  NACLPORTS_CFLAGS+=" -O1 "
-  NACLPORTS_CPPFLAGS+=" -O1 "
-  NACLPORTS_CXXFLAGS+=" -O1 "
-else
-  NACLPORTS_CFLAGS+=" -O2 "
-  NACLPORTS_CPPFLAGS+=" -O2 "
-  NACLPORTS_CXXFLAGS+=" -O2 "
-fi
+
+ConfigureStep() {
+  # TODO: Remove when this is fixed.
+  # https://code.google.com/p/nativeclient/issues/detail?id=3205
+  if [ "$NACL_ARCH" = "arm" ]; then
+    NACLPORTS_CFLAGS="${NACLPORTS_CFLAGS/-O2/-O1}"
+  fi
+  DefaultConfigureStep
+}
+
+
 
 # BuildStep() {
 #   export CXXFLAGS="${NACLPORTS_CXXFLAGS} -O2 "
