@@ -55,8 +55,8 @@ ConfigureStep() {
     --disable-everything \
     --enable-muxer=webm \
     --enable-demuxer=matroska \
-    --enable-encoder=libvpx_vp8,libvorbis \
-    --enable-decoder=libvpx_vp8,libvorbis \
+    --enable-encoder=libvpx_vp8,libvpx_vp9,libvorbis,libopus \
+    --enable-decoder=libvpx_vp8,libvpx_vp9,libvorbis,libopus \
     --enable-filter="${FILTERS}" \
     --disable-yasm \
     --disable-asm \
