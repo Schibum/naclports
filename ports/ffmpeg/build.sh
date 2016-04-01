@@ -63,6 +63,7 @@ ConfigureStep() {
     --enable-cross-compile \
     --enable-protocol=file \
     --enable-libvorbis \
+    --enable-libopus \
     --enable-libvpx \
     --disable-programs \
     --prefix=${PREFIX} \
