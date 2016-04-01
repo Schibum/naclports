@@ -44,6 +44,7 @@ ConfigureStep() {
   else
     extra_args+=" --enable-static"
   fi
+  echo $PKG_CONFIG_PATH
 
   FILTERS="copy,null,anull,scale,resample,movie,amovie,crop,pad,apad,atrim,\
     trim,sine,setpts,asetpts,volume,aevalsrc,aeval,aresample,aformat,format,\
@@ -66,6 +67,7 @@ ConfigureStep() {
     --enable-libopus \
     --enable-libvpx \
     --disable-programs \
+    --pkg-config=pkg-config \
     --prefix=${PREFIX} \
     ${extra_args}
 }
