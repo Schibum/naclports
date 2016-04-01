@@ -13,6 +13,11 @@ if [[ ${NACL_ARCH} == arm && ${TOOLCHAIN} == glibc ]]; then
   EXTRA_CONFIGURE_ARGS="--enable-small"
 fi
 
+if [ "${NACL_SHARED}" = "1" ]; then
+  NACLPORTS_CFLAGS+=" -fPIC"
+  NACLPORTS_CXXFLAGS+=" -fPIC"
+fi
+
 SetOptFlags() {
   # libvps sets it own optimisation flags
   return
@@ -22,5 +27,7 @@ ConfigureStep() {
   SetupCrossEnvironment
   LogExecute ${SRC_DIR}/configure --target=generic-gnu --cpu=le32 \
       --disable-unit-tests --prefix=${PREFIX} \
+      --enable-vp8 \
+      --disable-examples \
       --extra-cflags="${NACLPORTS_CPPFLAGS}" ${EXTRA_CONFIGURE_ARGS:-}
 }
