@@ -1,38 +1,26 @@
-#!/bin/bash
-# Copyright (c) 2012 The Native Client Authors. All rights reserved.
+# Copyright 2015 The Native Client Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-if [ "${NACL_SHARED}" = "1" ]; then
-  NACLPORTS_CFLAGS+=" -fPIC"
-  NACLPORTS_CXXFLAGS+=" -fPIC"
-  EXECUTABLES+=
+OS_JOBS=1
+
+if [[ ${NACL_LIBC} == newlib ]]; then
+  NACLPORTS_CXXFLAGS+=" -std=gnu++11"
 fi
+
+if [[ ${NACL_ARCH} == arm && ${TOOLCHAIN} == glibc ]]; then
+  # Force -O2 rather then -O3 to work around arm gcc bug
+  EXTRA_CONFIGURE_ARGS="--enable-small"
+fi
+
+SetOptFlags() {
+  # libvps sets it own optimisation flags
+  return
+}
 
 ConfigureStep() {
   SetupCrossEnvironment
-
-  local conf_host
-  if [ "${NACL_ARCH}" = pnacl ]; then
-    conf_host=pnacl
-  else
-    conf_host=${NACL_CROSS_PREFIX}
-  fi
-  enable_small=""
-  if [ "${NACL_ARCH}" = "arm" ]; then
-    enable_small="--enable-small"
-  fi
-
-
-  LogExecute ${SRC_DIR}/configure \
-    --enable-vp8 \
-    --target=pnacl \
-    --prefix=${PREFIX} \
-    --disable-unit-tests \
-    --disable-examples \
-    --disable-runtime_cpu_detect \
-    ${enable_small}
-
-  make clean
+  LogExecute ${SRC_DIR}/configure --target=generic-gnu --cpu=le32 \
+      --disable-unit-tests --prefix=${PREFIX} \
+      --extra-cflags="${NACLPORTS_CPPFLAGS}" ${EXTRA_CONFIGURE_ARGS:-}
 }
-

@@ -13,7 +13,7 @@
 set -o errexit
 set -o nounset
 
-# Use this variable to pin the naclports buildbots to a specific
+# Use this variable to pin the webports buildbots to a specific
 # SDK version.  This does not apply to the nightly builders, and
 # should be left unset unless there is ongoing issue with the lastest
 # SDK build.
@@ -35,7 +35,7 @@ fi
 
 # The bots set the BOTO_CONFIG environment variable to a different .boto file
 # (currently /b/build/site-config/.boto). override this to the gsutil default
-# which has access to gs://naclports.
+# which has access to gs://webports.
 # gsutil also looks for AWS_CREDENTIAL_FILE, so clear that too.
 unset AWS_CREDENTIAL_FILE
 unset BOTO_CONFIG
@@ -43,7 +43,7 @@ unset BOTO_CONFIG
 RESULT=0
 
 # TODO: Eliminate this dependency if possible.
-# This is required on OSX so that the naclports version of pkg-config can be
+# This is required on OSX so that the webports version of pkg-config can be
 # found.
 export PATH=${PATH}:/opt/local/bin
 
@@ -52,11 +52,24 @@ if [ "${TEST_BUILDBOT:-}" = "1" -a -z "${BUILDBOT_BUILDERNAME:-}" ]; then
 fi
 
 BuildShard() {
+  # Select shard count
+  if [ "${OS}" = "mac" ]; then
+    SHARDS=2
+  elif [ "${OS}" = "linux" ]; then
+  if [ "${TOOLCHAIN}" = "emscripten" ]; then
+      SHARDS=1
+    else
+      SHARDS=6
+    fi
+  else
+    echo "Unspecified sharding for OS: ${OS}" 1>&2
+    exit 1
+  fi
+
+  echo "@@@BUILD_STEP setup@@@"
   export TOOLCHAIN
   export SHARD
   export SHARDS
-
-  echo "@@@BUILD_STEP setup@@@"
   if ! ./build_tools/buildbot_build_shard.sh ; then
     RESULT=1
   fi
@@ -88,10 +101,10 @@ BUILDBOT_BUILDERNAME=${BUILDBOT_BUILDERNAME#periodic-}
 PYTHON=${SCRIPT_DIR}/python_wrapper
 
 # Decode buildername.
-readonly BNAME_REGEX="(nightly-|naclports-)?(.+)-(.+)-(.+)"
+readonly BNAME_REGEX="(nightly-|webports-)?(.+)-(.+)-(.+)"
 if [[ ${BUILDBOT_BUILDERNAME} =~ ${BNAME_REGEX} ]]; then
   readonly PREFIX=${BASH_REMATCH[1]}
-  if [ "${PREFIX}" = "naclports-" ]; then
+  if [ "${PREFIX}" = "webports-" ]; then
     readonly TRYBOT=1
     readonly NIGHTLY=0
   elif [ "${PREFIX}" = "nightly-" ]; then
@@ -119,27 +132,12 @@ if [ "${OS}" = "win" ]; then
   PYTHON=python.bat
 fi
 
-# Convert toolchain contains in the bot name to valid TOOLCHAIN value
+# Convert toolchain contained in the bot name to valid TOOLCHAIN value
 # as expected by the SDK tools.
 if [ "${BOT_TYPE}" = "clang" ]; then
   TOOLCHAIN=clang-newlib
-else
+elif [ "${BOT_TYPE}" != "toolchain" ]; then
   TOOLCHAIN=${BOT_TYPE}
-fi
-
-# Select shard count
-if [ "${OS}" = "mac" ]; then
-  SHARDS=2
-elif [ "${OS}" = "linux" ]; then
-  if [ "${TOOLCHAIN}" = "bionic" ]; then
-    SHARDS=1
-  elif [ "${TOOLCHAIN}" = "emscripten" ]; then
-    SHARDS=1
-  else
-    SHARDS=6
-  fi
-else
-  echo "Unspecified sharding for OS: ${OS}" 1>&2
 fi
 
 # Optional Clobber (if checked in the buildbot ui).
@@ -152,9 +150,6 @@ fi
 if [ -z "${TEST_BUILDBOT:-}" -o ! -d ${NACL_SDK_ROOT} ]; then
   echo "@@@BUILD_STEP Install Latest SDK@@@"
   ARGS=""
-  if [ ${TOOLCHAIN:-} = bionic ]; then
-    ARGS+=" --bionic"
-  fi
   if [ "${PINNED_SDK_VERSION:-}" != "" -a "${NIGHTLY}" != "1" ]; then
     ARGS+=" -v ${PINNED_SDK_VERSION}"
   fi
@@ -181,7 +176,7 @@ InstallEmscripten() {
 }
 
 Unittests() {
-  echo "@@@BUILD_STEP naclports unittests@@@"
+  echo "@@@BUILD_STEP webports unittests@@@"
   CMD="make -C $(dirname ${SCRIPT_DIR}) check"
   echo "Running ${CMD}"
   if ! ${CMD}; then
@@ -208,7 +203,7 @@ PlumbingTests() {
   fi
 }
 
-if [ -z "${TEST_BUILDBOT:-}" -a ${TOOLCHAIN:-} = emscripten ]; then
+if [[ ${TOOLCHAIN:-} == emscripten || ${BOT_TYPE} == toolchain ]]; then
   InstallEmscripten
 fi
 
@@ -224,8 +219,13 @@ export PEPPER_DIR=pepper_${PEPPER_VERSION}
 export NACLPORTS_ANNOTATE=1
 . ${SCRIPT_DIR}/buildbot_common.sh
 
-CleanCurrentToolchain
-BuildShard
+
+if [[ ${BOT_TYPE} == toolchain ]]; then
+  ./build_tools/buildbot_build_toolchain.sh
+else
+  CleanCurrentToolchain
+  BuildShard
+fi
 
 # Publish resulting builds to Google Storage, but only on the
 # linux bots.

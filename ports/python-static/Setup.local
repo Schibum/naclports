@@ -12,7 +12,7 @@
 # it, depending on your system -- see the GNU readline instructions.
 # It's okay for this to be a shared library, too.
 
-# NOTE this has been commented out in naclports to ensure no
+# NOTE this has been commented out in webports to ensure no
 # GPL dependencies are used in the python-static build
 #readline readline.c -lreadline -ltermcap
 
@@ -102,6 +102,8 @@ cPickle cPickle.c
 # This require zlib 1.1.3 (or later).
 # See http://www.gzip.org/zlib/
 zlib zlibmodule.c -I$(prefix)/include -L$(exec_prefix)/lib -lz
+
+bz2 bz2module.c -I$(prefix)/include -L$(exec_prefix)/lib -lbz2
 
 # This file will have appended to it the contents of the registered modules in
 # the host python tree.

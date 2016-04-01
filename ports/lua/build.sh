@@ -5,11 +5,12 @@
 BUILD_DIR=${SRC_DIR}
 EXECUTABLES="src/lua${NACL_EXEEXT} src/luac${NACL_EXEEXT}"
 
-NACLPORTS_CPPFLAGS+=" -Dmain=nacl_main"
-NACLPORTS_LDFLAGS+=" ${NACL_CLI_MAIN_LIB}"
+EnableCliMain
 
-if [ "${NACL_LIBC}" = "glibc" ]; then
+if [ ${TOOLCHAIN} == glibc ]; then
   PLAT=nacl-glibc
+elif [ ${TOOLCHAIN} == emscripten ]; then
+  PLAT=emscripten
 else
   PLAT=nacl-newlib
 fi
@@ -41,22 +42,20 @@ BuildStep() {
   set -x
   make MYLDFLAGS="${NACLPORTS_LDFLAGS}" MYCFLAGS="${NACLPORTS_CPPFLAGS}" \
       AR="${NACLAR} rcu" RANLIB="${NACLRANLIB}" CC="${NACLCC} -std=gnu99" \
+      MYLIBS="${NACLPORTS_LIBS}" \
       PLAT=${PLAT} EXEEXT=${NACL_EXEEXT} -j${OS_JOBS}
   set +x
 }
 
 TestStep() {
-  if [ "${NACL_ARCH}" = pnacl ]; then
-    ChangeDir src
-    # Just do the x86-64 version for now.
-    TranslateAndWriteLauncherScript lua.pexe x86-64 lua.x86-64.nexe lua
-    TranslateAndWriteLauncherScript luac.pexe x86-64 luac.x86-64.nexe luac
-    ChangeDir ..
-  fi
-
   # First, run the 'make test' target.  This currently just runs
   # lua -v.
   LogExecute make PLAT=${PLAT} test
+
+  if [[ ${TOOLCHAIN} == emscripten ]]; then
+    # TODO(sbc): fix lua tests running under node.js
+    return
+  fi
 
   # Second, run the lua unittests. See: http://www.lua.org/tests/
   ChangeDir lua-5.3.0-tests
@@ -72,18 +71,7 @@ PublishStep() {
   MakeDir ${PUBLISH_DIR}
   ChangeDir ${PUBLISH_DIR}
 
-  if [[ $TOOLCHAIN == pnacl ]]; then
-    LogExecute cp ${INSTALL_DIR}${PREFIX}/bin/lua${NACL_EXEEXT} \
-        lua${NACL_EXEEXT}
-    LogExecute python ${NACL_SDK_ROOT}/tools/create_nmf.py \
-        lua${NACL_EXEEXT} -s . -o lua.nmf
-  else
-    MakeDir _platform_specific/${NACL_ARCH}
-    LogExecute cp ${INSTALL_DIR}${PREFIX}/bin/lua${NACL_EXEEXT} \
-        _platform_specific/${NACL_ARCH}/lua${NACL_EXEEXT}
-    LogExecute python ${NACL_SDK_ROOT}/tools/create_nmf.py --no-arch-prefix \
-        _platform_specific/*/lua${NACL_EXEEXT} -s . -o lua.nmf
-  fi
+  PublishMultiArch src/lua${NACL_EXEEXT} lua
 
   LogExecute python ${TOOLS_DIR}/create_term.py lua
 

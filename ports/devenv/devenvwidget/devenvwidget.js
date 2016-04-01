@@ -4,6 +4,8 @@
  * found in the LICENSE file.
  */
 
+'use strict';
+
 /*
  * This plugin allows clients to include a DevEnvWidget in a web page, which
  * uses GCC in the NaCl Development Environment extension to compile and run
@@ -148,7 +150,7 @@
     return {
       name: 'nacl_spawn',
       nmf: 'bash.nmf',
-      argv: ['bash', '-c', '. /mnt/http/setup-environment && ' + cmd],
+      argv: ['bash', '--login', '-c', cmd],
       cwd: '/home/user',
       envs: []
     };
@@ -231,7 +233,7 @@
           self.port.onMessage.removeListener(handleMessage);
           reject(new Error(response.error));
         }
-      }
+      };
       self.port.postMessage(msg);
       self.port.onMessage.addListener(handleMessage);
     });

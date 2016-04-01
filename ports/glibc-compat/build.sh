@@ -3,20 +3,18 @@
 # found in the LICENSE file.
 
 BUILD_DIR=${SRC_DIR}
-if [ "${TOOLCHAIN}" != "bionic" -a "${TOOLCHAIN}" != "emscripten" ]; then
+if [ "${TOOLCHAIN}" != "emscripten" ]; then
   EXECUTABLES=out/glibc_compat_test
 fi
 
 ConfigureStep() {
-  if [ "${TOOLCHAIN}" = "bionic" ]; then
-    return
-  fi
   LogExecute cp -rf ${START_DIR}/* .
   LogExecute rm -rf out
 }
 
+
 BuildStep() {
-  if [ "${TOOLCHAIN}" = "bionic" -o "${TOOLCHAIN}" = "emscripten" ]; then
+  if [ "${TOOLCHAIN}" = "emscripten" ]; then
     return
   fi
   # export the nacl tools
@@ -28,11 +26,12 @@ BuildStep() {
   export LDFLAGS=${NACLPORTS_LDFLAGS}
   export CPPFLAGS=${NACLPORTS_CPPFLAGS}
   export CFLAGS=${NACLPORTS_CFLAGS}
+  export GTEST_DIR=${NACL_PREFIX}/src/gtest
   DefaultBuildStep
 }
 
 TestStep() {
-  if [ "${TOOLCHAIN}" = "bionic" -o "${TOOLCHAIN}" = "emscripten" ]; then
+  if [ "${TOOLCHAIN}" = "emscripten" ]; then
     return
   fi
   if [ "${TOOLCHAIN}" = "pnacl" ]; then

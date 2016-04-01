@@ -2,8 +2,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-export EXTRA_LIBS="${NACL_CLI_MAIN_LIB}"
-NACLPORTS_CPPFLAGS+=" -Dpipe=nacl_spawn_pipe"
+EnableCliMain
+NACLPORTS_CPPFLAGS+=" -Wall -Werror -Dpipe=nacl_spawn_pipe"
+NACLPORTS_CPPFLAGS+=" -isystem ${GTEST_SRC}/include"
 
 EXECUTABLES="tests/devenv_small_test_${NACL_ARCH}${NACL_EXEEXT} \
              jseval/jseval_${NACL_ARCH}${NACL_EXEEXT}"
@@ -19,17 +20,19 @@ BuildStep() {
 
   # Build jseval module.
   MakeDir ${BUILD_DIR}/jseval
-  LogExecute ${CC} ${CPPFLAGS} ${CFLAGS} ${LDFLAGS} -O2 \
+  LogExecute ${CC} ${CPPFLAGS} ${CFLAGS} ${LDFLAGS} \
       ${START_DIR}/jseval.c \
       -o ${BUILD_DIR}/jseval/jseval_${NACL_ARCH}${NACL_EXEEXT} \
-      ${EXTRA_LIBS}
+      ${LIBS}
 
   # Build test module.
-  MakeDir ${BUILD_DIR}/tests
-  LogExecute ${CXX} ${CPPFLAGS} ${CXXFLAGS} ${LDFLAGS} -g \
-      ${START_DIR}/tests/devenv_small_test.cc \
-      -o ${BUILD_DIR}/tests/devenv_small_test_${NACL_ARCH}${NACL_EXEEXT} \
-      -lgtest ${EXTRA_LIBS}
+  MakeDir tests
+  LogExecute ${CXX} ${CPPFLAGS} ${CXXFLAGS} -o tests/devenv_small_test.o \
+      -c ${START_DIR}/tests/devenv_small_test.cc
+  LogExecute ${CXX} ${CPPFLAGS} ${CXXFLAGS} -o tests/gtest-all.o \
+      -c ${GTEST_SRC}/src/gtest-all.cc -I${GTEST_SRC}
+  LogExecute ${CXX} ${LDFLAGS} tests/devenv_small_test.o tests/gtest-all.o \
+      -o tests/devenv_small_test_${NACL_ARCH}${NACL_EXEEXT} ${LIBS}
 }
 
 InstallStep() {
@@ -37,27 +40,52 @@ InstallStep() {
 }
 
 #
-# $1: Name of directory in which to create the conf file.
-# $2: The http address of repo.
+# $1: Name name of the repo
+# $2: Name of directory in which to create the conf file.
+# $3: The http address of repo.
+# $4: The priority of the repo (higher number means higher priority).
+# $5: enabled
 #
 CreateRepoConfFile() {
-  MakeDir $1
+  local name=$1
+  local outdir=$2
+  local priority=$4
+  local enabled=$5
   local PKG_ARCH=${NACL_ARCH}
-  if [ "${PKG_ARCH}" = "x86_64" ]; then
+  if [[ ${PKG_ARCH} == x86_64 ]]; then
     PKG_ARCH=x86-64
   fi
-  if [ "${NACL_ARCH}" = "${TOOLCHAIN}" ]; then
-    local url="$2/pkg_${PKG_ARCH}"
+  if [[ ${NACL_ARCH} == ${TOOLCHAIN} ]]; then
+    local url="$3/pkg_${PKG_ARCH}"
   else
-    local url="$2/pkg_${TOOLCHAIN}_${PKG_ARCH}"
+    local url="$3/pkg_${TOOLCHAIN}_${PKG_ARCH}"
   fi
 
-  cat > $1/NaCl.conf <<EOF
-NaCl: {
-    url: $url,
+  MakeDir ${outdir}
+  cat > ${outdir}/${name}.conf <<EOF
+$name: {
+    URL: $url,
     MIRROR_TYPE: HTTP,
+    ENABLED: $enabled,
+    PRIORITY: $priority,
 }
 EOF
+}
+
+CreateRootFS() {
+  local tar_file=$1
+  MakeDir root/usr/etc/pkg/repos/
+  MakeDir root/etc
+  MakeDir root/home/user
+  sed "s/@TOOLCHAIN@/${TOOLCHAIN}/g" \
+    ${START_DIR}/bash_profile > root/etc/profile
+  LogExecute cp ${START_DIR}/bashrc root/home/user/.bashrc
+  # Create Nacl.conf file
+  CreateRepoConfFile Local root/usr/etc/pkg/repos "${LOCAL_SOURCE}" 1 NO
+  CreateRepoConfFile NaCl root/usr/etc/pkg/repos "${DEFAULT_SOURCE}" 0 YES
+  LogExecute tar cf ${tar_file} -C root etc usr home
+  LogExecute shasum ${tar_file} > ${tar_file}.hash
+  rm -rf root
 }
 
 PublishStep() {
@@ -67,7 +95,7 @@ PublishStep() {
   MakeDir ${APP_DIR}
 
   # Set up files for bootstrap.
-  local BASH_DIR=${NACL_PACKAGES_PUBLISH}/bash/${TOOLCHAIN}/bash_multiarch
+  local BASH_DIR=${NACL_PACKAGES_PUBLISH}/bash/${TOOLCHAIN}
   local PKG_DIR=${NACL_PACKAGES_PUBLISH}/pkg/${TOOLCHAIN}
   local GETURL_DIR=${NACL_PACKAGES_PUBLISH}/geturl/${TOOLCHAIN}
   local UNZIP_DIR=${NACL_PACKAGES_PUBLISH}/unzip/${TOOLCHAIN}
@@ -78,7 +106,7 @@ PublishStep() {
   LogExecute cp -fR ${UNZIP_DIR}/* ${APP_DIR}
 
   # Install jseval only for pnacl (as it can't really work otherwise).
-  if [ "${NACL_ARCH}" = "pnacl" ]; then
+  if [[ ${NACL_ARCH} == pnacl ]]; then
     LogExecute ${PNACLFINALIZE} \
         ${BUILD_DIR}/jseval/jseval_${NACL_ARCH}${NACL_EXEEXT} \
         -o ${APP_DIR}/jseval_${NACL_ARCH}${NACL_EXEEXT}
@@ -97,23 +125,23 @@ PublishStep() {
   LogExecute cp bash.nmf sh.nmf
   InstallNaClTerm ${APP_DIR}
 
-  # Create Nacl.conf file
-  CreateRepoConfFile "${APP_DIR}/repos_local_${NACL_ARCH}" "${LOCAL_SOURCE}"
-  CreateRepoConfFile "${APP_DIR}/repos_${NACL_ARCH}" "${DEFAULT_SOURCE}"
-
-  RESOURCES="background.js mounter.css mounter.js bash.js bashrc which
+  RESOURCES="background.js mounter.css mounter.js bash.js which
       install-base-packages.sh graphical.html devenv.js whitelist.js
       devenv_16.png devenv_48.png devenv_128.png"
   for resource in ${RESOURCES}; do
     LogExecute install -m 644 ${START_DIR}/${resource} ${APP_DIR}/
   done
-  sed "s/@TOOLCHAIN@/${TOOLCHAIN}/g" \
-    ${START_DIR}/setup-environment > ${APP_DIR}/setup-environment
 
   # Generate manifest.txt so that nacl_io can list the directory
   rm -f manifest.txt
   (cd ${APP_DIR} && ${NACL_SDK_ROOT}/tools/genhttpfs.py . -r > ../manifest.txt)
   mv ../manifest.txt .
+
+  if [[ $TOOLCHAIN == pnacl ]]; then
+    CreateRootFS bash_data.tar
+  else
+    CreateRootFS _platform_specific/${NACL_ARCH}/bash_data.tar
+  fi
 
   # Generate a manifest.json.
   GenerateManifest ${START_DIR}/manifest.json.template ${APP_DIR} \
@@ -136,16 +164,9 @@ PublishStep() {
   LogExecute cp -r ${START_DIR}/devenvwidget/* ${WIDGET_DIR}
 
   # Install tests.
-  MakeDir ${PUBLISH_DIR}/tests
-  LogExecute cp -r ${BUILD_DIR}/tests/* ${PUBLISH_DIR}/tests
-  cd ${PUBLISH_DIR}/tests
-  if [ "${NACL_ARCH}" = "pnacl" ]; then
-    LogExecute ${PNACLFINALIZE} devenv_small_test_${NACL_ARCH}${NACL_EXEEXT}
-  fi
-  LogExecute python ${NACL_SDK_ROOT}/tools/create_nmf.py \
-      devenv_small_test_${NACL_ARCH}${NACL_EXEEXT} \
-      -s . \
-      -o devenv_small_test.nmf
+  MakeDir tests
+  ChangeDir tests
+  LogExecute cp -r ${BUILD_DIR}/tests/*${NACL_EXEEXT} .
   LogExecute mv devenv_small_test_${NACL_ARCH}${NACL_EXEEXT} \
       devenv_small_test_${NACL_ARCH}
 
@@ -170,14 +191,11 @@ PostInstallTestStep() {
       LogExecute python ${START_DIR}/jseval_test.py -x -v -a ${arch}
     fi
     # Run large and io2014 tests only on the buildbots (against pinned revs).
-    # Temporarily disabled until the latest set of pkg files is uplaoded
-    # by the buildbots
-    # TODO(sbc): reenable this.
-    #if [[ "${BUILDBOT_BUILDERNAME:-}" != "" ]]; then
-      #LogExecute python ${START_DIR}/../devenv/devenv_large_test.py \
-        #-x -vv -a ${arch}
+    if [[ -n ${BUILDBOT_BUILDERNAME:-} ]]; then
+      LogExecute python ${START_DIR}/../devenv/devenv_large_test.py \
+        -x -v -a ${arch}
       #LogExecute python ${START_DIR}/../devenv/io2014_test.py \
-        #-x -vv -a ${arch}
-    #fi
+        #-x -v -a ${arch}
+    fi
   done
 }

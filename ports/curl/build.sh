@@ -8,7 +8,8 @@ export ac_cv_func_connect=yes
 
 # Can't use LIBS here otherwise nacl-spawn gets linked into the libcurl.so
 # which we don't ever want.
-export EXTRA_LIBS="${NACL_CLI_MAIN_LIB} -l${NACL_CXX_LIB}"
+export EXTRA_LIBS="${NACL_CLI_MAIN_LIB}"
+NACLPORTS_LDFLAGS+=" ${NACL_CLI_MAIN_LDFLAGS}"
 
 EnableGlibcCompat
 
@@ -32,14 +33,6 @@ PublishStep() {
     EXECUTABLE_DIR=.libs
   else
     EXECUTABLE_DIR=.
-  fi
-
-  if [ "${NACL_ARCH}" = "pnacl" ]; then
-    # Just set up the x86-64 version for now.
-    local pexe="${EXECUTABLE_DIR}/curl${NACL_EXEEXT}"
-    (cd src;
-     TranslateAndWriteLauncherScript ${pexe} x86-64 curl.x86-64.nexe curl
-    )
   fi
 
   MakeDir ${PUBLISH_DIR}

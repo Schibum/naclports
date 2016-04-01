@@ -1,11 +1,12 @@
 # Below is a list of people and organizations that have contributed source
-# code to the Native Client 'naclports' project.  Names should be added to the
+# code to the Native Client 'webports' project.  Names should be added to the
 # list like this:
 #
 #   Name/Organization <email address>
 
 Ashish Gaurav <gauravashish07@gmail.com>
 David Benjamin <davidben@mit.edu>
+Deepankar Tyagi <deepankar7tyagi@gmail.com>
 Jiří Daněk <dnk@mail.muni.cz>
 Marat Dukhan <maratek@gmail.com>
 Matthew Turk <matthewturk@gmail.com>
