@@ -1,8 +1,8 @@
 NAME=ffmpeg
-VERSION=2.6.1
-URL=http://ffmpeg.org/releases/ffmpeg-2.6.1.tar.bz2
+VERSION=2.8.6
+URL=http://ffmpeg.org/releases/ffmpeg-2.8.6.tar.bz2
 LICENSE=GPL,LGPL
 CONFLICTS=(libav)
 DEPENDS=(libvorbis libvpx glibc-compat opus)
-SHA1=dfcd13e7c3e65a59cbe4cab85718ae84da824c5b
+SHA1=974f470b551e745bbfb836c71a6a987be974faaf
 DISABLED_TOOLCHAIN=(emscripten)
