@@ -1,7 +1,7 @@
 NAME=imagemagick
 VERSION=6.9.0-4
 ARCHIVE_ROOT=ImageMagick-6.9.0-4
-URL=https://dl.dropboxusercontent.com/u/7490218/ImageMagick-6.9.0-4.tar.bz2
+URL=https://storage.googleapis.com/castify-registry-public-assets/ImageMagick-6.9.0-4.tar.bz2
 LICENSE=CUSTOM:LICENSE
 DEPENDS=(libpng jpeg8d bzip2 zlib)
 DISABLED_TOOLCHAIN=(emscripten)
